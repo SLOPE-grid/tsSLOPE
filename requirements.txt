@@ -1,0 +1,6 @@
+tqdm
+torch
+gpytorch
+scipy
+matplotlib
+numpy==1.26.4

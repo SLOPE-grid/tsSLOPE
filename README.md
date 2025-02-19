@@ -3,7 +3,7 @@
 
 ## Description
 
-This project implements the interface that reads an machine learning (ML) model trained in Python to be used in Julia to inform a JuMP optimization model. 
+This project implements the interface that reads a machine learning (ML) model trained in Python to be used in Julia to inform a JuMP optimization model. 
 
 Directories:
   - tsslope_lib: library that contains functions to load the ML model and some parameters

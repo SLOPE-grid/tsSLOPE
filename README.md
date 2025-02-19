@@ -3,7 +3,7 @@
 
 ## Description
 
-This project implements the interface that reads an ML model trained in python to be used in julia
+This project implements the interface that reads an machine learning (ML) model trained in Python to be used in Julia to inform a JuMP optimization model. 
 
 Directories:
   - tsslope_lib: library that contains functions to load the ML model and some parameters
@@ -45,3 +45,7 @@ where:
  - path_to_tsslope: path to the repo TsSLOPE
 
 For an example of how to load the mode and adding the TSI constraints, see test/test.jl
+
+## Acknowledgments
+
+This code has been supported by DOE ASCR under the SciDAC-OE partnership project [SLOPE-Grid](https://slope-grid.github.io/).

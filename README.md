@@ -3,12 +3,14 @@
 
 ## Description
 
-This project implements the interface that reads a machine learning (ML) model trained in Python to be used in Julia to inform a JuMP optimization model. 
+This repository provides interfaces and glue code to ensure software integration between machine learning models (MLs) in Python, algebraic modelling frameworks in Julia, and HPC optimization solvers in C++. 
+
+implements the interface that reads a machine learning (ML) model trained in Python to be used in Julia to inform a JuMP optimization model. 
 
 Directories:
   - tsslope_lib: library that contains functions to load the ML model and some parameters
   - tsslope_lib_jl: contains functions that implement the tsi contraints in julia
-  - test: c ontaints test code
+  - test: contains test code
 
 ## Add your files
 

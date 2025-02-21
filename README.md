@@ -11,8 +11,8 @@ We integrate ML models, which are trained using [PyTorch](https://pytorch.org/) 
 ### ML training using simulation data (tsslope-siml)
 We provide Python drivers that generate training points for ML by using TS simulators. These drivers are based on existing software libraries, such as [libEnsemble](https://github.com/Libensemble/libensemble) for handling a large number of ensembles of simulations (that is, TS simulations) on massively parallel HPC platforms. The simulations can be performed by current TS libraries, such as PowerWorld or ANDES. Finally, we provide Python scripts that train a ML model to learn  TS measures, such as TS indexes (which are integrated in optimization models using  `tsslope-pump` described above). This work is in progress and code will be made available later.
 
-### Optimization interfaces (tsslope-opt)
-The optimization problems obtained by using tsslope-pump to incorporate TS ML surrogates in JuMP optimal power flow models are of significant sizes and requires memory-distributed parallel computing. `tsslope-opt` provides the code needed to interface with HPC optimization solvers, such as [HiOp PriDec](https://github.com/LLNL/hiop/) solver, in particular, will provide the Julia-C++ interoperability required by the C+--based HiOp Pridec to evaluate parts of the Julia-based algebraic JuMP optimization models.
+[comment]: #  ### Optimization interfaces (tsslope-opt)
+[comment]: # The optimization problems obtained by using tsslope-pump to incorporate TS ML surrogates in JuMP optimal power flow models are of significant sizes and requires memory-distributed parallel computing. `tsslope-opt` provides the code needed to interface with HPC optimization solvers, such as [HiOp PriDec](https://github.com/LLNL/hiop/) solver, in particular, will provide the Julia-C++ interoperability required by the C+--based HiOp Pridec to evaluate parts of the Julia-based algebraic JuMP optimization models.
 
 Directories:
   - tsslope_lib: library that contains functions to load the ML model and some parameters

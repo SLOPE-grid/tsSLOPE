@@ -7,7 +7,7 @@ Python ML models trained using [PyTorch](https://pytorch.org/) and/or its extens
 
 Directories:
   - tsslope_lib: library that contains functions to load the ML model and some parameters
-  - tsslope_lib_jl: contains functions that implement the tsi contraints in julia
+  - tsslope_lib_jl: contains functions that implement the TS constraints in julia
   - test: contains test code
 
 
@@ -26,10 +26,10 @@ Then run:
 
 ## Usage
 
-In order to use this package, after installation, you must add the following to preamble of the Julia code
+In order to use this package, after installation, you must add the following to the preamble of the Julia code
 ```
 include(string(path_to_tsslope, "/init.jl"))
 ```
 where `path_to_tsslope` specifies path to this directory.
 
-For an example of how to load the mode and adding the TSI constraints, see `test/test.jl`
+For an example of how to load an existing JuMP optimization model and adding the TS ML-based constraints to it, see `test/test.jl`

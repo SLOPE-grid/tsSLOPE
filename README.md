@@ -5,54 +5,30 @@
 
 This repository provides interfaces and glue code to ensure software integration between machine learning models (MLs) in Python, algebraic modelling frameworks in Julia, and HPC optimization solvers in C++. This specific approach is required by ongoing research for solving optimal power flow problems with transient stability (TS) constraints informed by ML surrogates that is taking place under the [SLOPE-Grid](https://slope-grid.github.io/) project.
 
-### Python MLs within JuMP optimization models (tsslope-pump)
-We integrate ML models, which are trained using [PyTorch](https://pytorch.org/) and/or its extensions, such as [GPyTorch](https://gpytorch.ai/), with algebraic optimization problems specified using [JuMP](https://jump.dev/) in Julia. `tsslope_lib` contains the code that infers the ML model in Python and computes first- and second-order derivatives of the ML output with respect to a subset of the optimization variables (inputs to the ML model). `tsslope_lib_jl` contains the Julia code needed for (i) software interoperability between Python and Julia and (ii) integrating the ML model as constraints in an existing JuMP optimization model. 
+### tsslope-pump: Python MLs within JuMP optimization models 
+tsslope-pump integrates Python ML models, which are trained using [PyTorch](https://pytorch.org/) and/or its extensions, such as [GPyTorch](https://gpytorch.ai/), with algebraic optimization problems specified using [JuMP](https://jump.dev/) in Julia. 
 
-### ML training using simulation data (tsslope-siml)
+### tsslope-siml: ML training using simulation data
 We provide Python drivers that generate training points for ML by using TS simulators. These drivers are based on existing software libraries, such as [libEnsemble](https://github.com/Libensemble/libensemble) for handling a large number of ensembles of simulations (that is, TS simulations) on massively parallel HPC platforms. The simulations can be performed by current TS libraries, such as PowerWorld or ANDES. Finally, we provide Python scripts that train a ML model to learn  TS measures, such as TS indexes (which are integrated in optimization models using  `tsslope-pump` described above). This work is in progress and code will be made available later.
 
+## Installation and usage
 
-Directories:
-  - tsslope_lib: library that contains functions to load the ML model and some parameters
-  - tsslope_lib_jl: contains functions that implement the tsi contraints in julia
-  - test: contains test code
+Please see to README files in `tsslope-pump` and `tsslope-siml` directories for how to install, test, and use the two libraries above. 
 
-## Add your files
+## Issues
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+Users are highly encouraged to report issues by opening new github issues. 
 
-```
-cd existing_repo
-git remote add origin https://lc.llnl.gov/gitlab/santiago/tsslope.git
-git branch -M main
-git push -uf origin main
-```
+## Contributors
 
-## Installation
-
-Runthe installation script:
-  
-    ./install.sh 
-
-## Testing
-
-After installation, set all environment variables that are needed in the file "test/load_env_values.jl"    
-Then run:
-   
-    julia test/test.jl
-
-## Usage
-
-In order to use this package, after installation, you must add the following to the julia code before the use of any constrainr:
-
-include(string(path_to_tsslope, "/init.jl"))
-  
-where: 
- - path_to_tsslope: path to the repo TsSLOPE
-
-For an example of how to load the mode and adding the TSI constraints, see test/test.jl
+tsSLOPE is developed by Claudio Santiago (santiago10@llnl.gov), Nai-Yuan Chiang (chiang7@llnl.gov), and Cosmin G. Petra (petra1@llnl.gov). 
 
 ## Acknowledgments
 
 This code has been supported by DOE ASCR under the SciDAC-OE partnership project [SLOPE-Grid](https://slope-grid.github.io/).
+
+## Copyright
+
+Copyright (c) 2025, Lawrence Livermore National Security, LLC. All rights reserved. Produced at  Lawrence Livermore National Laboratory. LLNL-CODE-XXXXXX. tsSLOPE is free software; you can modify it and/or redistribute it under the terms of the BSD 3-clause license. See [COPYRIGHT](COPYRIGHT) and [LICENSE](LICENSE) for complete copyright and license information.
+
+

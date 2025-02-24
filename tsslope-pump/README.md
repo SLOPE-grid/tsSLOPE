@@ -30,6 +30,6 @@ In order to use this package, after installation, you must add the following to 
 ```
 include(string(path_to_tsslope, "/init.jl"))
 ```
-where `path_to_tsslope` specifies path to this directory.
+where `path_to_tsslope` specifies path to this directory (tsslope/tsslope-pump).
 
 For an example of how to load an existing JuMP optimization model and adding the TS ML-based constraints to it, see `test/test.jl`

@@ -6,9 +6,9 @@ Python ML models trained using [PyTorch](https://pytorch.org/) and/or its extens
 
 
 Directories:
-  - tsslope_lib: library that contains functions to load the ML model and some parameters
-  - tsslope_lib_jl: contains functions that implement the TS constraints in julia
-  - test: contains test code
+  - tsslope-pump-py: library that contains functions to load the ML model and some parameters
+  - tsslope-pump-jl: contains functions that implement the TS constraints in julia
+  - driver: contains test code
 
 
 ## Installation
@@ -22,7 +22,7 @@ Runthe installation script:
 After installation, set all environment variables that are needed in the file "test/load_env_values.jl"    
 Then run:
    
-    julia test/test.jl
+    julia driver/driver.jl
 
 ## Usage
 

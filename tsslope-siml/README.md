@@ -14,14 +14,15 @@ Directories:
 
 ## Installation
 
-tbd
+No installation is required. To use the python scripts in this folder, one need to install some third-party packages.
+- `PowerWorld`, a commercial power system simulator, is required for all the scripts.
+- `esa` is an easy-to-use wrapper for PowerWorld's Simulator Automation Server (SimAuto). It can be obtained from: https://github.com/mzy2240/ESA.
+- `libEnsemble` is an adaptive, portable, and scalable software for connecting "deciders" to experiments or simulations. It can be obtained from https://github.com/Libensemble/libensemble
 
 ## Testing
 
 tbd
 
 ## Usage
-
-In order to use this package, after installation, you ... tbd
-
-For an example of how to ..., see `....`
+DataGen_PW_parallel.py --- An example to show how to run PowerWorld PF and TS simulations from different initial points in parallel. This script creats data for the later training in ML.
+run_pw_opf_libensemble.py --- An example to sure how to run PowerWorld OPF simulations in parallel in python.

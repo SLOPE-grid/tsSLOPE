@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='tsslope_lib',
-    version='0.0.2',
+    version='0.0.3',
     author='santiago10',
     description='Interface for tsi surrogate model trained by torch',
     license='BSD',

@@ -6,12 +6,6 @@ We provide HPC workflows in Python drivers to generate training data generated b
 
 tsslope-siml also  provides Python scripts that train a ML model to learn  TS measures, such as TS indexes (which are integrated in optimization models using  `tsslope-pump`). 
 
-
-Directories:
-  - tbd1: library that contains functions to load the ML model and some parameters
-  - test: contains test code
-
-
 ## Installation
 
 No installation is required. To use the python scripts in this folder, one need to install some third-party packages.
@@ -19,10 +13,7 @@ No installation is required. To use the python scripts in this folder, one need 
 - `esa` is an easy-to-use wrapper for PowerWorld's Simulator Automation Server (SimAuto). It can be obtained from: https://github.com/mzy2240/ESA.
 - `libEnsemble` is an adaptive, portable, and scalable software for connecting "deciders" to experiments or simulations. It can be obtained from https://github.com/Libensemble/libensemble
 
-## Testing
-
-tbd
 
 ## Usage
-DataGen_PW_parallel.py --- An example to show how to run PowerWorld PF and TS simulations from different initial points in parallel. This script creats data for the later training in ML.
-run_pw_opf_libensemble.py --- An example to sure how to run PowerWorld OPF simulations in parallel in python.
+- DataGen_PW_parallel.py --- An example to show how to run PowerWorld PF and TS simulations from different initial points in parallel. This script creats data for the later training in ML.
+- run_pw_opf_libensemble.py --- An example to sure how to run PowerWorld OPF simulations in parallel in python.

@@ -1,6 +1,5 @@
 
 using Pkg;
-path_to_exajugo = "/p/lustre1/santiago/COSMIN/OPTIMIZER/PF_BRANCH/exajugo"
 Pkg.activate((path_to_exajugo))
 push!(LOAD_PATH, string(path_to_exajugo, "/modules"))
 
@@ -137,13 +136,21 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 	opt = optimizer_with_attributes(Ipopt.Optimizer,
 		                            #"linear_solver" => "ma57",
 		                            "sb" => "yes")
-	solution, m = solve_basecase_mod(psd, opt)
+	solution, m, user_data = solve_basecase(psd, opt; output_dir=solution_dir)
 
-	print("done. Objective value: \$", round(solution.base_cost, digits=1),
-		".\nWriting solution to "*solution_dir*" ... ")
-	if !ispath(solution_dir)
+    tsicon = TSIConstraint(psd, GPmodel, st_args)
+    tsicon_prime = TSIConstraintPrime(psd, GPmodel, st_args)
+    tsicon_prime_prime = TSIConstraintPrimePrime(psd, GPmodel, st_args)
+    register(m, :tsicon, 1, (pg,qg) -> tsicon(pg,qg), (pg,qg) -> tsicon_prime(pg,qg), (pg,qg) -> tsicon_prime_prime(pg,qg))
+
+    @constraint(m, tsicon( m[:p_g], m[:q_g]) >= 0 )
+    
+    if !ispath(solution_dir)
 		mkpath(solution_dir)
 	end
-	write_solution(solution_dir, psd, solution)
-	return m, psd, st_args
+    solution = solve_basecase_from_model(m, psd, user_data; output_dir=solution_dir)
+    
+	print("done. Objective value: \$", round(solution.base_cost, digits=1),
+		".\nWriting solution to "*solution_dir*" ... ")
+
 end

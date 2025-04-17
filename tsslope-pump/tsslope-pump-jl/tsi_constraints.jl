@@ -5,7 +5,7 @@ using PyCall
 
 function ret_tsilib()
 
-       return pyimport("tsslope-pump-py")
+       return pyimport("tsslope_lib")
        end
 
 

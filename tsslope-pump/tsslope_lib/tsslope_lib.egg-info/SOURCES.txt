@@ -1,0 +1,5 @@
+setup.py
+tsslope_lib.egg-info/PKG-INFO
+tsslope_lib.egg-info/SOURCES.txt
+tsslope_lib.egg-info/dependency_links.txt
+tsslope_lib.egg-info/top_level.txt

@@ -12,7 +12,7 @@ source $VENV/bin/activate
 
 pip install -r requirements.txt
 
-pip install -e tsslope-pump-py
+pip install -e tsslope_lib
 
 echo "import sys;\
       sys.path.append("\"$CPATH"\") "|python

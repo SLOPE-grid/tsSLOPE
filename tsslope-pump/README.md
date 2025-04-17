@@ -6,7 +6,7 @@ Python ML models trained using [PyTorch](https://pytorch.org/) and/or its extens
 
 
 Directories:
-  - tsslope-pump-py: library that contains functions to load the ML model and some parameters
+  - tsslope_lib: library that contains functions to load the ML model and some parameters
   - tsslope-pump-jl: contains functions that implement the TS constraints in julia
   - driver: contains test code
 

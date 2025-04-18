@@ -1,5 +1,0 @@
-setup.py
-tsslope_pump_py.egg-info/PKG-INFO
-tsslope_pump_py.egg-info/SOURCES.txt
-tsslope_pump_py.egg-info/dependency_links.txt
-tsslope_pump_py.egg-info/top_level.txt

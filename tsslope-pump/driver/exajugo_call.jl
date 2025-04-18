@@ -1,16 +1,10 @@
 
-using Pkg;
-Pkg.activate((path_to_exajugo))
-push!(LOAD_PATH, string(path_to_exajugo, "/modules"))
-
 using Ipopt, JuMP, Printf
 using SCACOPFSubproblems
-
 
 using MAT
 using LinearAlgebra
 using SparseArrays
-
 
 function Mul_confi_get(confi_level)
     if confi_level == 0  # 0
@@ -54,35 +48,10 @@ function load_case(psd::SCACOPFdata, pf_file::String)
   
   # use python index
   ref_py = psd.RefBus - 1
-  #pv_Nidx = psd.N[N[!,:Type] .== :PV, :Bus]
-  #pq_Nidx= psd.N[N[!,:Type] .== :PQ, :Bus]
   pv_py = findall(row -> (row[:Bus] in psd.G[:, :Bus]) && (row[:Type] == :PV), eachrow(bus)) .- 1 # PV bus indices
   pq_py = findall(row -> (row[:Bus] in psd.G[:, :Bus]) && (row[:Type] == :PQ), eachrow(bus)) .- 1 # PQ bus indices
   pvref_py = vcat(pv_py,ref_py)
   pvref_py = sort(unique(pvref_py))   
-  
-  #=
-  pql = [i for i in 1:nb if bus[i, :Pd] != 0]
-
-  Qg_max = pf["Qg_max"]
-  Qg_min = pf["Qg_min"]
-  Pflow_max_all = pf["Pflow_max"]
-  branch_pw_all = pf["branch"]
-
-#    branch_pw = branch_pw_all[branch_pw_all[:, :TAP] .== 1, :]
-#    transformer_pw = branch_pw_all[branch_pw_all[:, :TAP] .!= 1, :]
-  Pflow_max_b = Pflow_max_all[branch_pw_all[:, :TAP] .== 1, :]
-  Pflow_max_t = Pflow_max_all[branch_pw_all[:, :TAP] .!= 1, :]
-  
-  V_max = pf["V_max"]
-  V_min = pf["V_min"]
-
-#    branch[:, [From, To]] .= branch_pw[:, 1:2] .- 1
-#    branch[:, [BR_R, BR_X, BR_B]] .= branch_pw[:, 3:end-1]
-  branch[:, RateBase] .= Pflow_max_b .+ 200
-  transformer[:, RateBase] .= Pflow_max_t .+ 200
-
-  =#
 
   load_idx_py = pf["load_idx"][1, :] .- 1
 
@@ -121,12 +90,7 @@ function load_case(psd::SCACOPFdata, pf_file::String)
   return st_args
 end
 
-#include("pyinterafce/ts_slope_jl/load_case.jl")
-#include("pyinterafce/ts_slope_jl/tsi_constraints.jl.jl")
-
-
 function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, GPmodel)
-	m=1
 	print("Reading instance from "*instance_dir*" ... ")
     psd = SCACOPFdata(instance_dir)
 	print("done.\nCreating index lists for TSI constraint ...")
@@ -136,11 +100,18 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 	opt = optimizer_with_attributes(Ipopt.Optimizer,
 		                            #"linear_solver" => "ma57",
 		                            "sb" => "yes")
-	solution, m, user_data = solve_basecase(psd, opt; output_dir=solution_dir)
+                                
+    # get primal starting point
+    x0 = get_primal_starting_point(psd)
+    
+	# create model
+    m, model_data = create_basecase_model(psd, opt, x0)
 
-    tsicon = TSIConstraint(psd, GPmodel, st_args)
-    tsicon_prime = TSIConstraintPrime(psd, GPmodel, st_args)
-    tsicon_prime_prime = TSIConstraintPrimePrime(psd, GPmodel, st_args)
+    #solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="nyTemp")
+
+    tsicon = TSIConstraint(m, psd, GPmodel, st_args)
+    tsicon_prime = TSIConstraintPrime(m, psd, GPmodel, st_args)
+    tsicon_prime_prime = TSIConstraintPrimePrime(m, psd, GPmodel, st_args)
     register(m, :tsicon, 1, (pg,qg) -> tsicon(pg,qg), (pg,qg) -> tsicon_prime(pg,qg), (pg,qg) -> tsicon_prime_prime(pg,qg))
 
     @constraint(m, tsicon( m[:p_g], m[:q_g]) >= 0 )
@@ -148,9 +119,9 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     if !ispath(solution_dir)
 		mkpath(solution_dir)
 	end
-    solution = solve_basecase_from_model(m, psd, user_data; output_dir=solution_dir)
+    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="nyTempTSI")
     
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
-		".\nWriting solution to "*solution_dir*" ... ")
+		".\nWriting solution to "*solution_dir*" ... \n")
 
 end

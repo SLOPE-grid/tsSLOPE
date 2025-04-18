@@ -12,7 +12,6 @@ from .load_GPmodel      import load_GPmodel
 
 
 def load_model(model_path, data_record):
-
    return load_GPmodel(model_path, data_record)
 
 

@@ -29,6 +29,8 @@ This code has been supported by DOE ASCR under the SciDAC-OE partnership project
 
 ## Copyright
 
-Copyright (c) 2025, Lawrence Livermore National Security, LLC. All rights reserved. Produced at  Lawrence Livermore National Laboratory. LLNL-CODE-XXXXXX. tsSLOPE is free software; you can modify it and/or redistribute it under the terms of the BSD 3-clause license. See [COPYRIGHT](COPYRIGHT) and [LICENSE](LICENSE) for complete copyright and license information.
+tsSLOPE is free software distributed under the terms of the BSD 3-clause license. Users can modify and/or redistribute tsSLOPE under the terms of the BSD 3-clause license. See [COPYRIGHT](COPYRIGHT), [LICENSE](LICENSE), and [NOTICE](NOTICE) files for complete copyright and license information. All new contributions must be made under the terms of the BSD 3-clause license. 
+
+LLNL-CODE-2005624
 
 

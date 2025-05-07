@@ -144,7 +144,6 @@ def load_GPmodel(Model_Path, data_record):
 
     PATHcwd = os.getcwd()
     warnings.filterwarnings("ignore")
-
     data = scio.loadmat(data_record)
     data = data['Data']
     TSI = data[:, -1].reshape(-1, 1)

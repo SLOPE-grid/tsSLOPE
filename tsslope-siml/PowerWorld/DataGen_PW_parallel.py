@@ -238,5 +238,10 @@ if __name__ == "__main__":
     Data = np.hstack((p_rew_sample, p_syn_sample, p_load_sample, q_load_sample, TSI_min))
     scio.savemat(Path_Save + r'\data_record.mat', {'Data': Data, 'TSI': TSI})
 
-    scio.savemat(Path_Save + r'\pf.mat', {'V': V, 'Pflow': Pflow, 'Qflow': Qflow, 'Pg': Pg, 'Qg': Qg, 'branch': branch,
-                                        'load_bus': load_bus})
+    V_max = V.max(0)
+    V_min = V.min(0)
+    Pflow_max = Pflow.max(0)
+    Qg_max = Qg.max(0)
+    Qg_min = Qg.min(0)
+    scio.savemat(Path_Save + r'\pf.mat', {'V_max': V_max, 'V_min': V_min, 'Pflow_max': Pflow_max, 'Qg_max': Qg_max,
+                                          'Qg_min': Qg_min, 'branch': branch, 'load_bus': load_bus})

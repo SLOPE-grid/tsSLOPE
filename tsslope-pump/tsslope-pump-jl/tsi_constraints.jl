@@ -38,23 +38,21 @@ struct TSIConstraint
   function (tsi_f::TSIConstraint)(pg,qg)
     Pg_values, Qg_values = get_values(tsi_f.m_, pg, qg)
   
-    pgen_ls = tsi_f.st_args_["pgen_ls"] .+ 1
-    disp_load = tsi_f.st_args_["disp_load"] .+ 1
-    PG_full = zeros(length(pgen_ls)+length(disp_load))
-    QG_full = zeros(length(pgen_ls)+length(disp_load))
+    gen_idx = tsi_f.st_args_["gen_idx"] .+ 1
+
+    display("length(gen_idx): $(length(gen_idx)))")
+
+    PG_full = zeros(tsi_f.st_args_["numb_gen"])
+    QG_full = zeros(tsi_f.st_args_["numb_gen"])
     
-    PG_full[pgen_ls] = Pg_values
-    QG_full[pgen_ls] = Qg_values
-    
-    condition = tsi_f.psd_.N[:, :Pd] .> 0
-    load_bus_indices = findall(condition)
-  
-    PG_full[disp_load] = tsi_f.psd_.N[load_bus_indices, :Pd]
-    QG_full[disp_load] = tsi_f.psd_.N[load_bus_indices, :Qd]
-    
+    PG_full[gen_idx] = Pg_values
+    QG_full[gen_idx] = Qg_values
+        
     # Call the Python function
     tsilib = ret_tsilib() 
     TSI_f = tsilib.eval_tsi_f(tsi_f.GPmodel_, PG_full, QG_full, tsi_f.st_args_)
+
+    display(TSI_f)
 
     return Float32(TSI_f[1])
 
@@ -81,7 +79,8 @@ struct TSIConstraint
     nb = 500
     ng = 90
     
-    Pg_GP, Qg_GP = get_values(tsi_g.m_, tsi_f, pg, qg)
+    # Pg_GP, Qg_GP = get_values(tsi_g.m_, tsi_f, pg, qg)
+    Pg_GP, Qg_GP = get_values(tsi_h.m_, pg, qg)
     
     condition = tsi_g.psd_.N[:, :Pd] .> 0
     load_bus_indices = findall(condition)

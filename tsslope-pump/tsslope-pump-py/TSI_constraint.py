@@ -7,9 +7,48 @@ import torch
 from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
 import time
 
-#def TSI_constraint(GPmodel, Pg, Pl, Ql, st_args):
+def TSI_constraint(Surrogate, Pg, Qg, st_args):
+    if Surrogate['model_type'] == "CNN":
+        return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
+    elif Surrogate['model_type'] == "DSPP":
+        return TSI_constraint_GP(Surrogate, Pg, Qg, st_args)
 
-def TSI_constraint(GPmodel, Pg, Qg, st_args):
+def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
+    Mul_confi = st_args['Mul_confi']
+    gen_idx = st_args['gen_idx']
+    model = Surrogate['model']
+
+    model.eval()
+
+    print(f"Pg shape: {Pg.shape}, Qg shape: {Qg.shape}")
+
+    PL = st_args['PL']
+    QL = st_args['QL']
+
+    Pg_input = Pg.reshape(1, -1)
+    Qg_input = Qg.reshape(1, -1)
+    Pl_input = -PL.reshape(1, -1)
+    Ql_input = -QL.reshape(1, -1)
+
+    X_np = np.hstack([Pg_input, Pl_input, Ql_input])
+
+    print(f"Pg model len: {Pg_input.shape}, Pl model len: {Pl_input.shape}, Ql model len:{Ql_input.shape}")
+
+    X = torch.tensor(X_np, dtype=torch.float32).unsqueeze(0)
+    X.requires_grad_()   # turn autodiff on
+
+    print(f"X shape: {X.shape}")
+
+    if torch.cuda.is_available():
+        model.cuda()
+        X = X.cuda()
+
+    pred = model(X).item()
+
+    return pred
+
+
+def TSI_constraint_GP(GPmodel, Pg, Qg, st_args):
     Mul_confi = st_args['Mul_confi']
     gen_idx = st_args['gen_idx']
     model = GPmodel['model']
@@ -24,6 +63,7 @@ def TSI_constraint(GPmodel, Pg, Qg, st_args):
     pgen_ls = st_args['pgen_ls']
     Pg_GP = Pg.reshape(1, -1)[:, pgen_ls]
     Qg_GP = Qg.reshape(1, -1)[:, pgen_ls]
+
     Pg_GP = Pg_GP[:, gen_idx]
     Qg_GP = Qg_GP[:, gen_idx]
     Pl_GP = -Pg.reshape(1, -1)[:, disp_load]

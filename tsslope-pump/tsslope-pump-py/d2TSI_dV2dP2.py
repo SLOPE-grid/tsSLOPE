@@ -4,10 +4,38 @@ import numpy as np
 from numpy import conj, arange, diag, zeros, asmatrix, asarray
 from scipy.sparse import issparse, csr_matrix as sparse
 import torch
+from torch.autograd.functional import hessian
 from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
 import time
 
-def d2TSI_dV2dP2(GPmodel, Pg, Qg, Pl, Ql, nb, ng, muTSI, st_args):
+def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, nb, ng, muTSI, st_args):
+    if Surrogate['model_type'] == "CNN":
+        return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, nb, ng, muTSI, st_args)
+    elif Surrogate['model_type'] == "DSPP":
+        return d2TSI_dV2dP2_Gp(Surrogate, Pg, Qg, Pl, Ql, nb, ng, muTSI, st_args)
+
+def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, muTSI, st_args):
+
+    def model_scalar(pg_vector):
+        pl_t = torch.tensor(Pl, dtype=torch.float32)
+        ql_t = torch.tensor(Ql, dtype=torch.float32)
+
+        X = torch.cat([pg_vector, pl_t, ql_t], dim=0)
+        X = X.unsqueeze(0).unsqueeze(0)
+
+        y = CNNmodel(X)
+        return y.sum()    # must be scalar
+
+    print("Taking 2nd derv")
+
+    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+
+    H = hessian(model_scalar, pg)
+    H = H.detach().cpu().numpy()
+
+    return HT
+
+def d2TSI_dV2dP2_GP(GPmodel, Pg, Qg, Pl, Ql, nb, ng, muTSI, st_args):
     model = GPmodel['model']
     X_max = GPmodel['X_max']
     X_min = GPmodel['X_min']

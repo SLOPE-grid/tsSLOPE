@@ -1,5 +1,6 @@
 import gpytorch
 import torch
+import torch.nn as nn
 import os
 import tqdm
 import urllib.request
@@ -132,6 +133,56 @@ class TwoLayerDSPP(DSPP):
 
         return torch.cat(mus, dim=-1), torch.cat(variances, dim=-1), torch.cat(lls, dim=-1)
 
+class CNN1D_GELU_Avg(nn.Module):
+    def __init__(self):
+        super(CNN1D_GELU_Avg, self).__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 8, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(8, 16, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+            nn.Linear(16, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+def load_surrogate(Model_Path, data_record, model_type):
+    if model_type == "CNN":
+        return load_CNNmodel(Model_Path, data_record)
+    elif model_type == "DSPP":
+        return load_GPmodel(Model_Path, data_record)
+     
+
+def load_CNNmodel(Model_Path, data_record):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    model = CNN1D_GELU_Avg()
+
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['model_type'] = "CNN"
+
+    # print(type(data)) 
+    # print(type(TSI)) 
+
+    # data = data.numpy()
+    # TSI = TSI.numpy()
+
+    return Surrogate, data, TSI
 
 def load_GPmodel(Model_Path, data_record):
     batch_size = 500  # Size of minibatch
@@ -203,6 +254,7 @@ def load_GPmodel(Model_Path, data_record):
     GPmodel['X_min'] = X_min / 100
     GPmodel['y_mean'] = y_mean
     GPmodel['y_std'] = y_std
+    GPmodel['model_type'] = "DSPP"
 
     data = data.numpy()
     TSI = TSI.numpy()

@@ -30,14 +30,14 @@ end
 
 
 function load_case(psd::SCACOPFdata, pf_file::String, case_type::String)
-    if case_type == "DSSP"
-        return load_case_DSSP(psd, pf_file)
+    if case_type == "DSPP"
+        return load_case_DSPP(psd, pf_file)
     else
-        return load_case(psd, pf_file)
+        return load_case_general(psd, pf_file)
     end
 end
 
-function load_case(psd::SCACOPFdata, pf_file::String)
+function load_case_general(psd::SCACOPFdata, pf_file::String)
 
     loads = psd.loads
     gen = psd.generators
@@ -54,7 +54,6 @@ function load_case(psd::SCACOPFdata, pf_file::String)
     QL = loads[!, :QL]
 
     confi_level = 2
-    Ql_tol_min = 0.01
   
     Mul_confi = Mul_confi_get(confi_level)
   
@@ -70,7 +69,7 @@ function load_case(psd::SCACOPFdata, pf_file::String)
     return st_args
 end
 
-function load_case_DSSP(psd::SCACOPFdata, pf_file::String)
+function load_case_DSPP(psd::SCACOPFdata, pf_file::String)
 
     baseMVA = psd.MVAbase
     bus = psd.N
@@ -133,11 +132,11 @@ function load_case_DSSP(psd::SCACOPFdata, pf_file::String)
     return st_args
 end
 
-function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, GPmodel)
+function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate)
 	print("Reading instance from "*instance_dir*" ... ")
     psd = SCACOPFdata(instance_dir)
 	print("done.\nCreating index lists for TSI constraint ...")
-	st_args = load_case(psd, pf_limit_file)
+	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
 		
 	print("done.\nSolving basecase using sparse OPF ...")
 	opt = optimizer_with_attributes(Ipopt.Optimizer,
@@ -150,31 +149,61 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     x0 = get_primal_starting_point(psd)
 
     print("done.\nCreating model ...")
-    
+
+    # tsicon = TSIConstraint(psd, Surrogate, st_args)
+    # tsicon_prime = TSIConstraintPrime(psd, Surrogate, st_args)
+    # tsicon_prime_prime = TSIConstraintPrimePrime(psd, Surrogate, st_args)
+    N_gen = length(st_args["gen_idx"])
+    function tsif(args...)
+        println("In f")
+        pg_vec = collect(args[1:N_gen])
+        qg_vec = collect(args[N_gen+1:2*N_gen])
+        return TSIConstraint2(psd, Surrogate, st_args, pg_vec, qg_vec)
+    end
+
+    function tsig(g::AbstractVector, args...)
+        println("In g")
+        pg_vec = collect(args[1:N_gen])
+        qg_vec = collect(args[N_gen+1:2*N_gen])
+        grad = TSIConstraintPrime2(psd, Surrogate, st_args, pg_vec, qg_vec)
+        g[1:2*N_gen] .= grad
+    end
+
+    function tsih(h::AbstractMatrix, args...)
+        println("In h")
+        pg_vec = collect(args[1:N_gen])
+        qg_vec = collect(args[N_gen+1:2*N_gen])
+        hess = TSIConstraintPrimePrime2(psd, Surrogate, st_args, pg_vec, qg_vec)
+        for i = 1:2*N_gen
+            for j = i:2*N_gen
+                h[i, j] = hess[i,j]
+            end
+        end
+    end
+
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
+    # print(N_gen, length(m[:p_g]))
 
-    print("\n1")
+    print("\n1\n")
 
-    #solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="nyTemp")
+    register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
-    tsicon = TSIConstraint(m, psd, GPmodel, st_args)
-    tsicon_prime = TSIConstraintPrime(m, psd, GPmodel, st_args)
-    tsicon_prime_prime = TSIConstraintPrimePrime(m, psd, GPmodel, st_args)
-    register(m, :tsicon, 1, (pg,qg) -> tsicon(pg,qg), (pg,qg) -> tsicon_prime(pg,qg), (pg,qg) -> tsicon_prime_prime(pg,qg))
+    print("\n2\n")
 
-    print("\n2")
-
-    @constraint(m, tsicon( m[:p_g], m[:q_g]) >= 0.5 )
+    @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.5 )
     
-    print("\n3")
+
+    print("\n3\n")
 
     if !ispath(solution_dir)
 		mkpath(solution_dir)
 	end
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="nyTempTSI")
+
+    # println(m[:tsi_con])
     
-    print("\n4")
+    print("\n4\n")
 
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
 		".\nWriting solution to "*solution_dir*" ... \n")

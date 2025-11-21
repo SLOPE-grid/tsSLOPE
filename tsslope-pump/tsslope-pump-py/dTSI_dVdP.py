@@ -10,9 +10,9 @@ import time
 def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, nb, ng, st_args):
 
     if Surrogate['model_type'] == "CNN":
-        return dTSI_dVdP_CNN(GPmodel, Pg, Qg, Pl, Ql, nb, ng, st_args)
+        return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, nb, ng, st_args)
     elif Surrogate['model_type'] == "DSPP":
-        return dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, nb, ng, st_args)
+        return dTSI_dVdP_GP(Surrogate, Pg, Qg, Pl, Ql, nb, ng, st_args)
 
 
 # derivative of f(s) > tau
@@ -48,14 +48,14 @@ def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
 
     return dTSI
 
-  # derivative of f_mu(X) - beta sqrt(f_sigma(X)) > tau
-def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
-    Mul_confi = st_args['Mul_confi']
-    model = Surrogate['model']
+#   # derivative of f_mu(X) - beta sqrt(f_sigma(X)) > tau
+# def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
+#     Mul_confi = st_args['Mul_confi']
+#     model = Surrogate['model']
 
-    model.eval()
+#     model.eval()
 
-    return dTSI  
+#     return dTSI  
 
 def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
     num_J_H, Mul_confi, gen_idx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_idx']

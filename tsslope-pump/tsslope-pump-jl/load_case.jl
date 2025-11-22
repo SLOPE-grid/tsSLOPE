@@ -53,7 +53,6 @@ function load_case(psd::SCACOPFdata, pf_file::String)
     QL = loads[!, :QL]
 
     confi_level = 2
-    Ql_tol_min = 0.01
   
     Mul_confi = Mul_confi_get(confi_level)
   

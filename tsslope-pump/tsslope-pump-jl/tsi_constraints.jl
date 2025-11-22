@@ -37,6 +37,8 @@ function TSIConstraint2(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg
   return Float64(TSI_f[1])
 end
 
+### define first derivative for the TSI constraint
+
 function TSIConstraintPrime2(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
 
   # Load information
@@ -58,6 +60,7 @@ function TSIConstraintPrime2(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, p
 
   # extract gradient infomation just for active generators
   grad = zeros(2 * num_active_gen)
+
   # check if the gradient is with respect to just pg or both pg qg
   if length(dTSI) == total_num_gen
     grad[1:num_active_gen] = dTSI[gen_idx]
@@ -69,8 +72,10 @@ function TSIConstraintPrime2(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, p
   return Float64.(grad)
 end
 
+### define second derivative for the TSI constraint
+
 function TSIConstraintPrimePrime2(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
-  
+
   # Load information
   PL = st_args["PL"]
   QL = st_args["QL"]

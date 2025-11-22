@@ -7,18 +7,16 @@ import torch
 from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
 import time
 
-def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, nb, ng, st_args):
+def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, st_args):
 
     if Surrogate['model_type'] == "CNN":
-        return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, nb, ng, st_args)
+        return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
     elif Surrogate['model_type'] == "DSPP":
-        return dTSI_dVdP_GP(Surrogate, Pg, Qg, Pl, Ql, nb, ng, st_args)
+        return dTSI_dVdP_GP(Surrogate, Pg, Qg, Pl, Ql, st_args)
 
 
 # derivative of f(s) > tau
-def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
-
-    print("taking gradient")
+def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, st_args):
 
     Mul_confi = st_args['Mul_confi']
     model = CNNmodel['model']
@@ -29,8 +27,8 @@ def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
     ql = torch.tensor(Qg, dtype=torch.float32, requires_grad=False)
 
     # --- reconstruct X in CNN input shape ---
-    X = torch.cat([pg, pl, ql], dim=0)   # (502,)
-    X = X.unsqueeze(0).unsqueeze(0)      # (1, 1, 502) adjust to your CNN
+    X = torch.cat([pg, pl, ql], dim=0)   # (N,)
+    X = X.unsqueeze(0).unsqueeze(0)      # (1, 1, N) adjust to your CNN
 
     # --- forward ---
     model.eval()
@@ -49,7 +47,7 @@ def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
     return dTSI
 
 #   # derivative of f_mu(X) - beta sqrt(f_sigma(X)) > tau
-# def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
+# def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, st_args):
 #     Mul_confi = st_args['Mul_confi']
 #     model = Surrogate['model']
 
@@ -57,7 +55,8 @@ def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
 
 #     return dTSI  
 
-def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, nb, ng, st_args):
+def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, st_args):
+    nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
     num_J_H, Mul_confi, gen_idx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_idx']
     ng0 = len(gen_idx)
 

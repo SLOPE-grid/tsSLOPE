@@ -14,18 +14,15 @@ tsslope_lib = pyimport("tsslope-pump-py")
 jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/tsi_constraints.jl"))
 
+print(path_to_tsslope)
+
 # need a better way of doing this
 model_type = "CNN"
 
-display("Code is running")
-
 CNNmodel, data, TSI = tsslope_lib.load_model(CNN_model_path, LLNL_data_record, model_type)
-
-display("Model is loaded")
 
 TSACOPF(case_path, case_sol_path, pf_limit_file, CNNmodel);
 
-display("Code finished running")
 
 # model_type = "DSPP"
 # GPmodel, data, TSI = tsslope_lib.load_model(model_path, data_record, model_type)

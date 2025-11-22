@@ -6,7 +6,7 @@ model_path =  "/usr/workspace/hiop/dane/project/scidac_2025/irabiel/WF_ACOPF/tsS
 data_record =  "/usr/workspace/hiop/dane/project/scidac_2025/irabiel/WF_ACOPF/tsSLOPE/example/data_record.mat"
 pf_limit_file = "/usr/workspace/hiop/dane/project/scidac_2025/irabiel/WF_ACOPF/tsSLOPE/example/pf_new.mat"
 
-CNN_model_path =  "/usr/workspace/hiop/dane/project/scidac_2025/irabiel/WF_ACOPF/tsSLOPE/tsslope-ml/model_state_CNN1D_acc_1.00000_rmse_0.000010_mae_0.000010_epoch_10_bs_32_lr_0.001_time_14.375.pth"
+CNN_model_path =  "/usr/workspace/hiop/dane/project/scidac_2025/irabiel/WF_ACOPF/tsSLOPE/tsslope-ml/model_state_CNN1D_acc_0.92276_rmse_0.244850_mae_0.120144_epoch_300_bs_32_lr_0.001_time_1071.894.pth"
 LLNL_data_record =  "/usr/workspace/hiop/dane/project/scidac_2025/irabiel/WF_ACOPF/tsSLOPE/tsslope-ml/combined_llnl_data.mat"
 
 case_path = "/usr/workspace/hiop/dane/project/scidac_2025/irabiel/WF_ACOPF/tsSLOPE/example/ACTIVSg500"

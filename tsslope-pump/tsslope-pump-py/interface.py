@@ -8,7 +8,7 @@ from .dTSI_dVdP         import dTSI_dVdP
 from .TSI_constraint    import TSI_constraint
 
 #from .load_case         import load_case
-from .load_GPmodel      import load_surrogate
+from .load_Surrogate    import load_surrogate
 
 
 def load_model(model_path, data_record, model_type):

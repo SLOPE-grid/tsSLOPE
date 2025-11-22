@@ -26,7 +26,7 @@ print(f"Using device: {device}")
 # =====================================================
 batch_size = 32
 learning_rate = 1e-3
-epochs = 10
+epochs = 300
 PATHcwd = os.getcwd()
 
 # =====================================================
@@ -38,6 +38,8 @@ data = sio.loadmat(data_path)["Data"]
 # Binary target: last column >= 0 → class 1, else 0
 TSI = data[:, -1].reshape(-1, 1)
 TSI = (TSI >= 0).astype(int)
+
+data = data[:, :-1]
 
 # Split data
 X_train, X_test, y_train, y_test = train_test_split(
@@ -65,14 +67,17 @@ class CNN1D_GELU_Avg(nn.Module):
     def __init__(self):
         super(CNN1D_GELU_Avg, self).__init__()
         self.net = nn.Sequential(
-            nn.Conv1d(1, 8, kernel_size=3, padding=1),
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
             nn.GELU(),
             nn.AvgPool1d(2),
-            nn.Conv1d(8, 16, kernel_size=3, padding=1),
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
             nn.GELU(),
             nn.AdaptiveAvgPool1d(1),
             nn.Flatten(),
-            nn.Linear(16, 1),
+            nn.Linear(64, 1),
             nn.Sigmoid()
         )
 

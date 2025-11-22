@@ -137,14 +137,17 @@ class CNN1D_GELU_Avg(nn.Module):
     def __init__(self):
         super(CNN1D_GELU_Avg, self).__init__()
         self.net = nn.Sequential(
-            nn.Conv1d(1, 8, kernel_size=3, padding=1),
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
             nn.GELU(),
             nn.AvgPool1d(2),
-            nn.Conv1d(8, 16, kernel_size=3, padding=1),
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
             nn.GELU(),
             nn.AdaptiveAvgPool1d(1),
             nn.Flatten(),
-            nn.Linear(16, 1),
+            nn.Linear(64, 1),
             nn.Sigmoid()
         )
 
@@ -167,6 +170,8 @@ def load_CNNmodel(Model_Path, data_record):
     TSI = data[:, -1].reshape(-1, 1)
     TSI = (TSI >= 0).astype(int)
 
+    data = data[:, :-1]
+
     model = CNN1D_GELU_Avg()
 
     state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
@@ -175,12 +180,6 @@ def load_CNNmodel(Model_Path, data_record):
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['model_type'] = "CNN"
-
-    # print(type(data)) 
-    # print(type(TSI)) 
-
-    # data = data.numpy()
-    # TSI = TSI.numpy()
 
     return Surrogate, data, TSI
 

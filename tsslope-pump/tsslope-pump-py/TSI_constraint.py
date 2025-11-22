@@ -20,8 +20,6 @@ def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
 
     model.eval()
 
-    print(f"Pg shape: {Pg.shape}, Qg shape: {Qg.shape}")
-
     PL = st_args['PL']
     QL = st_args['QL']
 
@@ -32,12 +30,7 @@ def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
 
     X_np = np.hstack([Pg_input, Pl_input, Ql_input])
 
-    print(f"Pg model len: {Pg_input.shape}, Pl model len: {Pl_input.shape}, Ql model len:{Ql_input.shape}")
-
     X = torch.tensor(X_np, dtype=torch.float32).unsqueeze(0)
-    X.requires_grad_()   # turn autodiff on
-
-    print(f"X shape: {X.shape}")
 
     if torch.cuda.is_available():
         model.cuda()

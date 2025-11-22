@@ -6,131 +6,137 @@ using MAT
 using LinearAlgebra
 using SparseArrays
 
-function Mul_confi_get(confi_level)
-    if confi_level == 0  # 0
-        Mul_confi = 0.0
-    elseif confi_level == 1  # 1*std 68.268949%
-        Mul_confi = 1.0
-    elseif confi_level == 2  # 2*std 95.449974%
-        Mul_confi = 2.0
-    elseif confi_level == 3  # 2*std 3*std 99.730020%
-        Mul_confi = 3.0
-    elseif confi_level == 6  # 60% - 0.8416
-        Mul_confi = 0.8416
-    elseif confi_level == 7  # 70% - 1.0364
-        Mul_confi = 1.0364
-    elseif confi_level == 8  # 80% - 1.2815
-        Mul_confi = 1.2815
-    elseif confi_level == 9  # 90% - 1.6448
-        Mul_confi = 1.6448
-    end
+jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
+include(string(jl_lib,"/load_case.jl"))
 
-    return Mul_confi
-end
+# function Mul_confi_get(confi_level)
+#     if confi_level == 0  # 0
+#         Mul_confi = 0.0
+#     elseif confi_level == 1  # 1*std 68.268949%
+#         Mul_confi = 1.0
+#     elseif confi_level == 2  # 2*std 95.449974%
+#         Mul_confi = 2.0
+#     elseif confi_level == 3  # 2*std 3*std 99.730020%
+#         Mul_confi = 3.0
+#     elseif confi_level == 6  # 60% - 0.8416
+#         Mul_confi = 0.8416
+#     elseif confi_level == 7  # 70% - 1.0364
+#         Mul_confi = 1.0364
+#     elseif confi_level == 8  # 80% - 1.2815
+#         Mul_confi = 1.2815
+#     elseif confi_level == 9  # 90% - 1.6448
+#         Mul_confi = 1.6448
+#     end
+
+#     return Mul_confi
+# end
 
 
-function load_case(psd::SCACOPFdata, pf_file::String, case_type::String)
-    if case_type == "DSPP"
-        return load_case_DSPP(psd, pf_file)
-    else
-        return load_case_general(psd, pf_file)
-    end
-end
+# function load_case(psd::SCACOPFdata, pf_file::String, case_type::String)
+#     if case_type == "DSPP"
+#         return load_case_DSPP(psd, pf_file)
+#     else
+#         return load_case_general(psd, pf_file)
+#     end
+# end
 
-function load_case_general(psd::SCACOPFdata, pf_file::String)
+# function load_case_general(psd::SCACOPFdata, pf_file::String)
 
-    loads = psd.loads
-    gen = psd.generators
-    active_gen = psd.G
-    ng = size(gen, 1)
+#     loads = psd.loads
+#     gen = psd.generators
+#     active_gen = psd.G
+#     ng = size(gen, 1)
+#     active_ng = size(active_gen, 1)
 
-    active_G_idx = active_gen[!, :Bus]
-    all_G_idx = gen[!, :I]
+#     active_G_idx = active_gen[!, :Bus]
+#     all_G_idx = gen[!, :I]
 
-    # Find the indices of the active generators within all the generators in python index
-    gen_idx = findall(in(active_G_idx), all_G_idx) .-1
+#     # Find the indices of the active generators within all the generators in python index
+#     gen_idx = findall(in(active_G_idx), all_G_idx) .-1
   
-    PL = loads[!, :PL]
-    QL = loads[!, :QL]
+#     PL = loads[!, :PL]
+#     QL = loads[!, :QL]
 
-    confi_level = 2
+#     confi_level = 2
+#     Ql_tol_min = 0.01
   
-    Mul_confi = Mul_confi_get(confi_level)
+#     Mul_confi = Mul_confi_get(confi_level)
   
-    st_args = Dict(
-        "gen_idx" => gen_idx,
-        "numb_gen" => ng,
-        "PL" => PL,
-        "QL" => QL,
-        "num_J_H" => 0,
-        "Mul_confi" => Mul_confi,
-    )
+#     st_args = Dict(
+#         "gen_idx" => gen_idx,
+#         "numb_gen" => ng,
+#         "numb_active_gen" => active_ng,
+#         "PL" => PL,
+#         "QL" => QL,
+#         "num_J_H" => 0,
+#         "Mul_confi" => Mul_confi,
+#     )
   
-    return st_args
-end
+#     return st_args
+# end
 
-function load_case_DSPP(psd::SCACOPFdata, pf_file::String)
+# function load_case_DSPP(psd::SCACOPFdata, pf_file::String)
 
-    baseMVA = psd.MVAbase
-    bus = psd.N
-    gen = psd.G
-    branch = psd.L
-    transformer = psd.T
-    gencost_slope = psd.G_epicost_slope
-    gencost_intercept = psd.G_epicost_intercept
-    nb = size(bus, 1)
-    ng = size(gen, 1)
-    nl = size(branch, 1)
-    nw = 9
+#     baseMVA = psd.MVAbase
+#     bus = psd.N
+#     gen = psd.G
+#     branch = psd.L
+#     transformer = psd.T
+#     gencost_slope = psd.G_epicost_slope
+#     gencost_intercept = psd.G_epicost_intercept
+#     nb = size(bus, 1)
+#     ng = size(gen, 1)
+#     nl = size(branch, 1)
+#     nw = 9
 
-    # Load power flow data
-    pf = matread(pf_file)
+#     # Load power flow data
+#     pf = matread(pf_file)
 
-    # use python index
-    ref_py = psd.RefBus - 1
-    #pv_Nidx = psd.N[N[!,:Type] .== :PV, :Bus]
-    #pq_Nidx= psd.N[N[!,:Type] .== :PQ, :Bus]
-    pv_py = findall(row -> (row[:Bus] in psd.G[:, :Bus]) && (row[:Type] == :PV), eachrow(bus)) .- 1 # PV bus indices
-    pq_py = findall(row -> (row[:Bus] in psd.G[:, :Bus]) && (row[:Type] == :PQ), eachrow(bus)) .- 1 # PQ bus indices
-    pvref_py = vcat(pv_py,ref_py)
-    pvref_py = sort(unique(pvref_py))   
+#     # use python index
+#     ref_py = psd.RefBus - 1
+#     #pv_Nidx = psd.N[N[!,:Type] .== :PV, :Bus]
+#     #pq_Nidx= psd.N[N[!,:Type] .== :PQ, :Bus]
+#     pv_py = findall(row -> (row[:Bus] in psd.G[:, :Bus]) && (row[:Type] == :PV), eachrow(bus)) .- 1 # PV bus indices
+#     pq_py = findall(row -> (row[:Bus] in psd.G[:, :Bus]) && (row[:Type] == :PQ), eachrow(bus)) .- 1 # PQ bus indices
+#     pvref_py = vcat(pv_py,ref_py)
+#     pvref_py = sort(unique(pvref_py))   
 
-    load_idx_py = pf["load_idx"][1, :] .- 1
+#     load_idx_py = pf["load_idx"][1, :] .- 1
 
-    gen_syn_idx_py = [0, 1, 2, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-                    35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 53, 54, 55, 56, 57, 58, 59]
-    gen_rew_ide_py = [3, 9, 16, 17, 22, 33, 34, 51, 52] 
-    gen_idx_py = vcat(gen_rew_ide_py, gen_syn_idx_py)
-    ref_gen_idx_py = findfirst(==(ref_py), gen_idx_py)
-    load_bus_py = unique(load_idx_py)
-    genload_bus_py = vcat(pvref_py, load_bus_py)            
-    genload_bus_py = Int.(genload_bus_py)                
-    genload_bus_sort_py = sort(unique(genload_bus_py))   
+#     gen_syn_idx_py = [0, 1, 2, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+#                     35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 53, 54, 55, 56, 57, 58, 59]
+#     gen_rew_ide_py = [3, 9, 16, 17, 22, 33, 34, 51, 52] 
+#     gen_idx_py = vcat(gen_rew_ide_py, gen_syn_idx_py)
+#     ref_gen_idx_py = findfirst(==(ref_py), gen_idx_py)
+#     load_bus_py = unique(load_idx_py)
+#     genload_bus_py = vcat(pvref_py, load_bus_py)            
+#     genload_bus_py = Int.(genload_bus_py)                
+#     genload_bus_sort_py = sort(unique(genload_bus_py))   
 
-    disp_load_py = [findfirst(==(i), genload_bus_sort_py) for i in load_bus_py] .- 1
-    pgen_ls_py = [findfirst(==(i), genload_bus_sort_py) for i in pvref_py] .- 1
+#     disp_load_py = [findfirst(==(i), genload_bus_sort_py) for i in load_bus_py] .- 1
+#     pgen_ls_py = [findfirst(==(i), genload_bus_sort_py) for i in pvref_py] .- 1
 
-    slack_gen = 3
-    n_unstable = 0
-    confi_level = 2
-    Ql_tol_min = 0.01
+#     slack_gen = 3
+#     n_unstable = 0
+#     confi_level = 2
+#     Ql_tol_min = 0.01
 
-    Mul_confi = Mul_confi_get(confi_level)
+#     Mul_confi = Mul_confi_get(confi_level)
 
-    st_args = Dict(
-        "gen_idx" => gen_idx_py,
-        "disp_load" => disp_load_py,
-        "pgen_ls" => pgen_ls_py,
-        "num_J_H" => 0,
-        "Mul_confi" => Mul_confi,
-        "load_bus" => load_bus_py,
-        "genload_bus_sort" => genload_bus_sort_py,
-        "pvref" => pvref_py,
-        "pv" => pv_py
-    )
+#     st_args = Dict(
+#         "gen_idx" => gen_idx_py,
+#         "disp_load" => disp_load_py,
+#         "pgen_ls" => pgen_ls_py,
+#         "num_J_H" => 0,
+#         "Mul_confi" => Mul_confi,
+#         "load_bus" => load_bus_py,
+#         "genload_bus_sort" => genload_bus_sort_py,
+#         "pvref" => pvref_py,
+#         "pv" => pv_py
+#     )
 
-    return st_args
-end
+#     return st_args
+# end
 
 function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate)
 	print("Reading instance from "*instance_dir*" ... ")
@@ -143,26 +149,17 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 		                            #"linear_solver" => "ma57",
 		                            "sb" => "yes")
                                 
-    print("\nGetting primal starting point ...")
-
     # get primal starting point
     x0 = get_primal_starting_point(psd)
 
-    print("done.\nCreating model ...")
-
-    # tsicon = TSIConstraint(psd, Surrogate, st_args)
-    # tsicon_prime = TSIConstraintPrime(psd, Surrogate, st_args)
-    # tsicon_prime_prime = TSIConstraintPrimePrime(psd, Surrogate, st_args)
-    N_gen = length(st_args["gen_idx"])
+    N_gen = st_args["numb_active_gen"]
     function tsif(args...)
-        println("In f")
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
         return TSIConstraint2(psd, Surrogate, st_args, pg_vec, qg_vec)
     end
 
     function tsig(g::AbstractVector, args...)
-        println("In g")
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
         grad = TSIConstraintPrime2(psd, Surrogate, st_args, pg_vec, qg_vec)
@@ -170,12 +167,11 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     end
 
     function tsih(h::AbstractMatrix, args...)
-        println("In h")
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
         hess = TSIConstraintPrimePrime2(psd, Surrogate, st_args, pg_vec, qg_vec)
         for i = 1:2*N_gen
-            for j = i:2*N_gen
+            for j = 1:i
                 h[i, j] = hess[i,j]
             end
         end
@@ -183,27 +179,15 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
-    # print(N_gen, length(m[:p_g]))
-
-    print("\n1\n")
 
     register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
-    print("\n2\n")
-
     @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.5 )
     
-
-    print("\n3\n")
-
     if !ispath(solution_dir)
 		mkpath(solution_dir)
 	end
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="nyTempTSI")
-
-    # println(m[:tsi_con])
-    
-    print("\n4\n")
 
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
 		".\nWriting solution to "*solution_dir*" ... \n")

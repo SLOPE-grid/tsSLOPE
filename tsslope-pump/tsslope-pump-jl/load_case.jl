@@ -35,10 +35,13 @@ end
 
 function load_case(psd::SCACOPFdata, pf_file::String)
 
+    bus = psd.N
     loads = psd.loads
     gen = psd.generators
     active_gen = psd.G
     ng = size(gen, 1)
+    active_ng = size(active_gen, 1)
+    nb = size(bus, 1)
 
     active_G_idx = active_gen[!, :Bus]
     all_G_idx = gen[!, :I]
@@ -57,6 +60,8 @@ function load_case(psd::SCACOPFdata, pf_file::String)
     st_args = Dict(
         "gen_idx" => gen_idx,
         "numb_gen" => ng,
+        "numb_active_gen" => active_ng,
+        "numb_buses" => nb,
         "PL" => PL,
         "QL" => QL,
         "num_J_H" => 0,
@@ -71,12 +76,14 @@ function load_case_DSSP(psd::SCACOPFdata, pf_file::String)
     baseMVA = psd.MVAbase
     bus = psd.N
     gen = psd.G
+    all_gen = psd.generators
     branch = psd.L
     transformer = psd.T
     gencost_slope = psd.G_epicost_slope
     gencost_intercept = psd.G_epicost_intercept
     nb = size(bus, 1)
     ng = size(gen, 1)
+    all_ng = size(gen, 1)
     nl = size(branch, 1)
     nw = 9
 
@@ -117,6 +124,8 @@ function load_case_DSSP(psd::SCACOPFdata, pf_file::String)
     st_args = Dict(
         "gen_idx" => gen_idx_py,
         "disp_load" => disp_load_py,
+        "numb_buses" => nb,
+        "total_numb_gens" => all_ng,
         "pgen_ls" => pgen_ls_py,
         "num_J_H" => 0,
         "Mul_confi" => Mul_confi,

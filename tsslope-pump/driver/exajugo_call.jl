@@ -9,135 +9,6 @@ using SparseArrays
 jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/load_case.jl"))
 
-# function Mul_confi_get(confi_level)
-#     if confi_level == 0  # 0
-#         Mul_confi = 0.0
-#     elseif confi_level == 1  # 1*std 68.268949%
-#         Mul_confi = 1.0
-#     elseif confi_level == 2  # 2*std 95.449974%
-#         Mul_confi = 2.0
-#     elseif confi_level == 3  # 2*std 3*std 99.730020%
-#         Mul_confi = 3.0
-#     elseif confi_level == 6  # 60% - 0.8416
-#         Mul_confi = 0.8416
-#     elseif confi_level == 7  # 70% - 1.0364
-#         Mul_confi = 1.0364
-#     elseif confi_level == 8  # 80% - 1.2815
-#         Mul_confi = 1.2815
-#     elseif confi_level == 9  # 90% - 1.6448
-#         Mul_confi = 1.6448
-#     end
-
-#     return Mul_confi
-# end
-
-
-# function load_case(psd::SCACOPFdata, pf_file::String, case_type::String)
-#     if case_type == "DSPP"
-#         return load_case_DSPP(psd, pf_file)
-#     else
-#         return load_case_general(psd, pf_file)
-#     end
-# end
-
-# function load_case_general(psd::SCACOPFdata, pf_file::String)
-
-#     loads = psd.loads
-#     gen = psd.generators
-#     active_gen = psd.G
-#     ng = size(gen, 1)
-#     active_ng = size(active_gen, 1)
-
-#     active_G_idx = active_gen[!, :Bus]
-#     all_G_idx = gen[!, :I]
-
-#     # Find the indices of the active generators within all the generators in python index
-#     gen_idx = findall(in(active_G_idx), all_G_idx) .-1
-  
-#     PL = loads[!, :PL]
-#     QL = loads[!, :QL]
-
-#     confi_level = 2
-#     Ql_tol_min = 0.01
-  
-#     Mul_confi = Mul_confi_get(confi_level)
-  
-#     st_args = Dict(
-#         "gen_idx" => gen_idx,
-#         "numb_gen" => ng,
-#         "numb_active_gen" => active_ng,
-#         "PL" => PL,
-#         "QL" => QL,
-#         "num_J_H" => 0,
-#         "Mul_confi" => Mul_confi,
-#     )
-  
-#     return st_args
-# end
-
-# function load_case_DSPP(psd::SCACOPFdata, pf_file::String)
-
-#     baseMVA = psd.MVAbase
-#     bus = psd.N
-#     gen = psd.G
-#     branch = psd.L
-#     transformer = psd.T
-#     gencost_slope = psd.G_epicost_slope
-#     gencost_intercept = psd.G_epicost_intercept
-#     nb = size(bus, 1)
-#     ng = size(gen, 1)
-#     nl = size(branch, 1)
-#     nw = 9
-
-#     # Load power flow data
-#     pf = matread(pf_file)
-
-#     # use python index
-#     ref_py = psd.RefBus - 1
-#     #pv_Nidx = psd.N[N[!,:Type] .== :PV, :Bus]
-#     #pq_Nidx= psd.N[N[!,:Type] .== :PQ, :Bus]
-#     pv_py = findall(row -> (row[:Bus] in psd.G[:, :Bus]) && (row[:Type] == :PV), eachrow(bus)) .- 1 # PV bus indices
-#     pq_py = findall(row -> (row[:Bus] in psd.G[:, :Bus]) && (row[:Type] == :PQ), eachrow(bus)) .- 1 # PQ bus indices
-#     pvref_py = vcat(pv_py,ref_py)
-#     pvref_py = sort(unique(pvref_py))   
-
-#     load_idx_py = pf["load_idx"][1, :] .- 1
-
-#     gen_syn_idx_py = [0, 1, 2, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-#                     35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 53, 54, 55, 56, 57, 58, 59]
-#     gen_rew_ide_py = [3, 9, 16, 17, 22, 33, 34, 51, 52] 
-#     gen_idx_py = vcat(gen_rew_ide_py, gen_syn_idx_py)
-#     ref_gen_idx_py = findfirst(==(ref_py), gen_idx_py)
-#     load_bus_py = unique(load_idx_py)
-#     genload_bus_py = vcat(pvref_py, load_bus_py)            
-#     genload_bus_py = Int.(genload_bus_py)                
-#     genload_bus_sort_py = sort(unique(genload_bus_py))   
-
-#     disp_load_py = [findfirst(==(i), genload_bus_sort_py) for i in load_bus_py] .- 1
-#     pgen_ls_py = [findfirst(==(i), genload_bus_sort_py) for i in pvref_py] .- 1
-
-#     slack_gen = 3
-#     n_unstable = 0
-#     confi_level = 2
-#     Ql_tol_min = 0.01
-
-#     Mul_confi = Mul_confi_get(confi_level)
-
-#     st_args = Dict(
-#         "gen_idx" => gen_idx_py,
-#         "disp_load" => disp_load_py,
-#         "pgen_ls" => pgen_ls_py,
-#         "num_J_H" => 0,
-#         "Mul_confi" => Mul_confi,
-#         "load_bus" => load_bus_py,
-#         "genload_bus_sort" => genload_bus_sort_py,
-#         "pvref" => pvref_py,
-#         "pv" => pv_py
-#     )
-
-#     return st_args
-# end
-
 function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate)
 	print("Reading instance from "*instance_dir*" ... ")
     psd = SCACOPFdata(instance_dir)
@@ -156,29 +27,53 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     function tsif(args...)
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
-        return TSIConstraint2(psd, Surrogate, st_args, pg_vec, qg_vec)
+
+        gen_idx = st_args["gen_idx"] .+1
+        PG_full = zeros(st_args["numb_gen"])
+        QG_full = zeros(st_args["numb_gen"])
+        
+        PG_full[gen_idx] = pg_vec
+        QG_full[gen_idx] = qg_vec
+
+        # println("Pg = [", join(PG_full, ", "), "]")
+        # println("Qg = [", join(QG_full, ", "), "]")
+
+        # print("TSI constrint: ", TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec),"\n")
+        # return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
+        return 1.
     end
 
     function tsig(g::AbstractVector, args...)
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
-        grad = TSIConstraintPrime2(psd, Surrogate, st_args, pg_vec, qg_vec)
-        g[1:2*N_gen] .= grad
+        grad = TSIConstraintPrime(psd, Surrogate, st_args, pg_vec, qg_vec)
+        # print("TSI gradient constrint: ", maximum(abs.(grad)), "\n")
+        # g[1:2*N_gen] .= grad
+        g[1:2*N_gen] .= 0. .*grad
+        
     end
 
     function tsih(h::AbstractMatrix, args...)
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
-        hess = TSIConstraintPrimePrime2(psd, Surrogate, st_args, pg_vec, qg_vec)
+        hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, pg_vec, qg_vec)
+        # print("TSI hess constrint: ", maximum(abs.(hess)), "\n")
         for i = 1:2*N_gen
             for j = 1:i
-                h[i, j] = hess[i,j]
+                # h[i, j] = hess[i,j]
+                h[i, j] = 0.
             end
         end
+        
     end
 
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
+
+    Pl = st_args["PL"]
+    Ql = st_args["QL"]
+    println("Pl = [", join(Pl, ", "), "]")
+    println("Ql = [", join(Ql, ", "), "]")
 
     register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
@@ -188,6 +83,20 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 		mkpath(solution_dir)
 	end
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="nyTempTSI")
+    
+    # Pg_val = value.(m[:p_g])
+    # Qg_val = value.(m[:q_g])
+
+
+    # gen_idx = st_args["gen_idx"] .+1
+    # PG_full = zeros(st_args["numb_gen"])
+    # QG_full = zeros(st_args["numb_gen"])
+    
+    # PG_full[gen_idx] = Pg_val
+    # QG_full[gen_idx] = Qg_val
+
+    # println("Pg = [", join(Pg_val, ", "), "]")
+    # println("Qg = [", join(Qg_val, ", "), "]")
 
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
 		".\nWriting solution to "*solution_dir*" ... \n")

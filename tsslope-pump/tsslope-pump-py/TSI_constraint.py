@@ -10,12 +10,12 @@ import time
 def TSI_constraint(Surrogate, Pg, Qg, st_args):
     if Surrogate['model_type'] == "CNN":
         return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
+    elif Surrogate['model_type'] == "UQ_CNN":
+        return TSI_constraint_UQ_CNN(Surrogate, Pg, Qg, st_args)
     elif Surrogate['model_type'] == "DSPP":
         return TSI_constraint_GP(Surrogate, Pg, Qg, st_args)
 
 def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
-    Mul_confi = st_args['Mul_confi']
-    gen_idx = st_args['gen_idx']
     model = Surrogate['model']
 
     model.eval()
@@ -32,14 +32,34 @@ def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
 
     X = torch.tensor(X_np, dtype=torch.float32).unsqueeze(0)
 
-    if torch.cuda.is_available():
-        model.cuda()
-        X = X.cuda()
-
     pred = model(X).item()
 
     return pred
 
+# f = μ − β sqrt(var)
+def TSI_constraint_UQ_CNN(Surrogate, Pg, Qg, st_args):
+    Mul_confi = st_args['Mul_confi']
+    model = Surrogate['model']
+
+    model.eval()
+
+    PL = st_args['PL']
+    QL = st_args['QL']
+
+    Pg_input = Pg.reshape(1, -1)
+    Qg_input = Qg.reshape(1, -1)
+    Pl_input = -PL.reshape(1, -1)
+    Ql_input = -QL.reshape(1, -1)
+
+    X_np = np.hstack([Pg_input, Pl_input, Ql_input])
+
+    X = torch.tensor(X_np, dtype=torch.float32).unsqueeze(0)
+
+    mean_pred, var_pred = model(X)
+
+    f = mean_pred - Mul_confi * torch.sqrt(var_pred + 1e-8)
+
+    return f.squeeze().item()
 
 def TSI_constraint_GP(GPmodel, Pg, Qg, st_args):
     Mul_confi = st_args['Mul_confi']

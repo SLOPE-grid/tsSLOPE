@@ -22,7 +22,7 @@ end
 
 ### define TSI constraint
 
-function TSIConstraint2(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
+function TSIConstraint(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
   gen_idx = st_args["gen_idx"] .+1
   PG_full = zeros(st_args["numb_gen"])
   QG_full = zeros(st_args["numb_gen"])
@@ -39,7 +39,7 @@ end
 
 ### define first derivative for the TSI constraint
 
-function TSIConstraintPrime2(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
+function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
 
   # Load information
   PL = st_args["PL"]
@@ -74,7 +74,7 @@ end
 
 ### define second derivative for the TSI constraint
 
-function TSIConstraintPrimePrime2(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
+function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
 
   # Load information
   PL = st_args["PL"]

@@ -133,6 +133,40 @@ class TwoLayerDSPP(DSPP):
 
         return torch.cat(mus, dim=-1), torch.cat(variances, dim=-1), torch.cat(lls, dim=-1)
 
+class CNN1D_GELU_Avg_UQ(nn.Module):
+    def __init__(self):
+        super(CNN1D_GELU_Avg_UQ, self).__init__()
+
+        # Shared feature extractor (same as your original but without final layers)
+        self.features = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AdaptiveAvgPool1d(1),  # output shape: [batch, 64, 1]
+            nn.Flatten(),             # shape: [batch, 64]
+        )
+
+        # Two output heads: mean and log-variance
+        self.fc_mean = nn.Linear(64, 1)
+        self.fc_logvar = nn.Linear(64, 1)
+
+    def forward(self, x):
+        h = self.features(x)
+
+        # Mean should be in [0,1] (classification probability)
+        mean = torch.sigmoid(self.fc_mean(h))
+
+        # log-variance → variance > 0
+        logvar = self.fc_logvar(h)
+        var = torch.exp(logvar)
+
+        return mean, var
+
 class CNN1D_GELU_Avg(nn.Module):
     def __init__(self):
         super(CNN1D_GELU_Avg, self).__init__()
@@ -157,6 +191,8 @@ class CNN1D_GELU_Avg(nn.Module):
 def load_surrogate(Model_Path, data_record, model_type):
     if model_type == "CNN":
         return load_CNNmodel(Model_Path, data_record)
+    if model_type == "UQ_CNN":
+        return load_UQ_CNNmodel(Model_Path, data_record)
     elif model_type == "DSPP":
         return load_GPmodel(Model_Path, data_record)
      
@@ -173,13 +209,36 @@ def load_CNNmodel(Model_Path, data_record):
     data = data[:, :-1]
 
     model = CNN1D_GELU_Avg()
-
+    
     state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
     model.load_state_dict(state_dict)
 
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['model_type'] = "CNN"
+
+    return Surrogate, data, TSI
+
+
+def load_UQ_CNNmodel(Model_Path, data_record):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = CNN1D_GELU_Avg_UQ()
+
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['model_type'] = "UQ_CNN"
 
     return Surrogate, data, TSI
 

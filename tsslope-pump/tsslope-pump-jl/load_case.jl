@@ -29,11 +29,11 @@ function load_case(psd::SCACOPFdata, pf_file::String, case_type::String)
     if case_type == "DSSP"
         return load_case_DSSP(psd, pf_file)
     else
-        return load_case(psd, pf_file)
+        return load_case_general(psd, pf_file)
     end
 end
 
-function load_case(psd::SCACOPFdata, pf_file::String)
+function load_case_general(psd::SCACOPFdata, pf_file::String)
 
     bus = psd.N
     loads = psd.loads
@@ -52,7 +52,7 @@ function load_case(psd::SCACOPFdata, pf_file::String)
     PL = loads[!, :PL]
     QL = loads[!, :QL]
 
-    confi_level = 2
+    confi_level = 1
   
     Mul_confi = Mul_confi_get(confi_level)
   

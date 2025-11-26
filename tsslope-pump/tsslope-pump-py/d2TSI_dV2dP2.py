@@ -11,6 +11,8 @@ import time
 def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
     if Surrogate['model_type'] == "CNN":
         return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    elif Surrogate['model_type'] == "UQ_CNN":
+        return d2TSI_dV2dP2_UQ_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "DSPP":
         return d2TSI_dV2dP2_Gp(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
 
@@ -31,6 +33,32 @@ def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
 
     H = hessian(model_scalar, pg)
+
+    H = H.detach().cpu().numpy()
+
+    return H
+
+# f = μ − β sqrt(var)
+def d2TSI_dV2dP2_UQ_CNN(UQ_CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
+    Mul_confi = st_args['Mul_confi']
+    model = UQ_CNNmodel["model"]
+
+    def f_scalar(pg_vector):
+        pl_t = torch.tensor(Pl, dtype=torch.float32)
+        ql_t = torch.tensor(Ql, dtype=torch.float32)
+
+        X = torch.cat([pg_vector, pl_t, ql_t], dim=0)
+        X = X.unsqueeze(0).unsqueeze(0)
+
+        mean_pred, var_pred = model(X)
+
+        # f = μ − β sqrt(var)
+        f = mean_pred - Mul_confi * torch.sqrt(var_pred + 1e-8)
+        return f.squeeze()       # MUST BE SCALAR
+
+    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+
+    H = hessian(f_scalar, pg)
 
     H = H.detach().cpu().numpy()
 

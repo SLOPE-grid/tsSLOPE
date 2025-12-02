@@ -13,9 +13,97 @@ def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, st_args):
         return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
     elif Surrogate['model_type'] == "UQ_CNN":
         return dTSI_dVdP_UQ_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    elif Surrogate['model_type'] == "CNF":
+        return dTSI_dVdP_CNF(Surrogate, Pg, Qg, Pl, Ql, st_args)
     elif Surrogate['model_type'] == "DSPP":
         return dTSI_dVdP_GP(Surrogate, Pg, Qg, Pl, Ql, st_args)
 
+def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
+    """
+    Convert x from raw to standardized space if needed.
+    x_space: "raw" or "std".
+    """
+    x = x.view(-1)
+    if x_space == "std":
+        return x
+    mean = scaler.mean_.view(-1).to(x.device, x.dtype)
+    std = scaler.std_.view(-1).to(x.device, x.dtype)
+    return (x - mean) / std
+
+
+# --- Constraint value: c(x) = F_Y(u0 | x) - (1 - alpha) ---
+def constraint_value(
+    x_param: torch.Tensor,
+    model,
+    scaler,
+    u0: float,
+    alpha: float,
+    x_space: str,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    """
+    Chance constraint:
+        c(x) = P(Y <= u0 | x) - (1 - alpha)
+             = F_Y(u0 | x) - (1 - alpha)
+
+    We enforce c(x) >= 0.
+    """
+    # Map to standardized features for the model
+    x_std = x_to_std(x_param, scaler, x_space).view(1, -1)
+    y0 = torch.tensor([u0], device=device, dtype=dtype)
+    F_u0 = model.cdf(y0, x_std).view(())       # scalar
+    c = F_u0 - (1.0 - alpha)
+    return c
+
+def constraint_grad(
+    x_param: torch.Tensor,
+    model,
+    scaler,
+    u0: float,
+    alpha: float,
+    x_space: str,
+    device: torch.device,
+    dtype: torch.dtype,
+):
+    """
+    Return constraint value and its gradient with respect to x_param.
+    """
+    x = x_param.detach().clone().requires_grad_(True)
+    c = constraint_value(x, model, scaler, u0, alpha, x_space, device, dtype)
+    (g,) = torch.autograd.grad(c, x, create_graph=False, retain_graph=False)
+    return g
+
+def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
+    model = CNFmodel['model']
+    scaler = CNFmodel['scaler'] 
+    ckpt = CNFmodel['ckpt'] 
+    dtype = CNFmodel['dtype'] 
+    u0 = CNFmodel['u0'] 
+    alpha = CNFmodel['alpha'] 
+    device = CNFmodel['device'] 
+    x_space = CNFmodel['x_space'] 
+
+
+    # pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+    # qg = torch.tensor(Qg, dtype=torch.float32, requires_grad=True)
+    # pl = torch.tensor(Pl, dtype=torch.float32, requires_grad=False)
+    # ql = torch.tensor(Qg, dtype=torch.float32, requires_grad=False)
+
+    # X = torch.cat([pg, pl, qg, ql], dim=0)   # (N,)
+
+    # Concatenate generators first, then loads (same as training)
+    P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
+    Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
+
+    # Per-sample layout: (2, Nunits)
+    x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
+    x_test_np = x_test_np.reshape(-1)
+    X = torch.tensor(x_test_np, dtype=dtype)
+
+    g = constraint_grad(X, model, scaler, u0, alpha, x_space, device, dtype)
+
+    return g.detach().cpu().numpy()
 
 # derivative of f(s) > tau
 def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, st_args):

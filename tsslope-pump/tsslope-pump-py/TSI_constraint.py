@@ -12,8 +12,79 @@ def TSI_constraint(Surrogate, Pg, Qg, st_args):
         return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
     elif Surrogate['model_type'] == "UQ_CNN":
         return TSI_constraint_UQ_CNN(Surrogate, Pg, Qg, st_args)
+    elif Surrogate['model_type'] == "CNF":
+        return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
     elif Surrogate['model_type'] == "DSPP":
         return TSI_constraint_GP(Surrogate, Pg, Qg, st_args)
+
+def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
+    """
+    Convert x from raw to standardized space if needed.
+    x_space: "raw" or "std".
+    """
+    x = x.view(-1)
+    if x_space == "std":
+        return x
+    mean = scaler.mean_.view(-1).to(x.device, x.dtype)
+    std = scaler.std_.view(-1).to(x.device, x.dtype)
+    return (x - mean) / std
+
+
+# --- Constraint value: c(x) = F_Y(u0 | x) - (1 - alpha) ---
+def constraint_value(
+    x_param: torch.Tensor,
+    model,
+    scaler,
+    u0: float,
+    alpha: float,
+    x_space: str,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    """
+    Chance constraint:
+        c(x) = P(Y <= u0 | x) - (1 - alpha)
+             = F_Y(u0 | x) - (1 - alpha)
+
+    We enforce c(x) >= 0.
+    """
+    # Map to standardized features for the model
+    x_std = x_to_std(x_param, scaler, x_space).view(1, -1)
+    y0 = torch.tensor([u0], device=device, dtype=dtype)
+    F_u0 = model.cdf(y0, x_std).view(())       # scalar
+    c = F_u0 - (1.0 - alpha)
+    return c
+
+def TSI_constraint_CNF(Surrogate, Pg, Qg, st_args):
+    model = Surrogate['model']
+    scaler = Surrogate['scaler'] 
+    ckpt = Surrogate['ckpt'] 
+    dtype = Surrogate['dtype'] 
+    u0 = Surrogate['u0'] 
+    alpha = Surrogate['alpha'] 
+    device = Surrogate['device'] 
+    x_space = Surrogate['x_space'] 
+
+    PL = st_args['PL']
+    QL = st_args['QL']
+
+    Pg_input = Pg
+    Qg_input = Qg
+    Pl_input = -PL
+    Ql_input = -QL
+
+    # Concatenate generators first, then loads (same as training)
+    P_concat = np.concatenate([Pg_input, Pl_input], axis=0)  # (Ngen+Nload,)
+    Q_concat = np.concatenate([Qg_input, Ql_input], axis=0)  # (Ngen+Nload,)
+
+    # Per-sample layout: (2, Nunits)
+    x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
+    x_test_np = x_test_np.reshape(-1)
+    X = torch.tensor(x_test_np, dtype=dtype)
+
+    c_val = constraint_value(X, model, scaler, u0, alpha, x_space, device, dtype)
+
+    return c_val.item()
 
 def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
     model = Surrogate['model']

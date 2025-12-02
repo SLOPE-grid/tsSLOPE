@@ -42,6 +42,7 @@ function load_case_general(psd::SCACOPFdata, pf_file::String)
     ng = size(gen, 1)
     active_ng = size(active_gen, 1)
     nb = size(bus, 1)
+    nl = size(loads, 1)
 
     active_G_idx = active_gen[!, :Bus]
     all_G_idx = gen[!, :I]
@@ -61,6 +62,7 @@ function load_case_general(psd::SCACOPFdata, pf_file::String)
         "numb_gen" => ng,
         "numb_active_gen" => active_ng,
         "numb_buses" => nb,
+        "numb_loads" => nl,
         "PL" => PL,
         "QL" => QL,
         "num_J_H" => 0,

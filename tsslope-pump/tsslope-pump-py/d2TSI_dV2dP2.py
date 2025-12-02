@@ -13,26 +13,96 @@ def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
         return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "UQ_CNN":
         return d2TSI_dV2dP2_UQ_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    elif Surrogate['model_type'] == "CNF":
+        return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "DSPP":
         return d2TSI_dV2dP2_Gp(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
 
-def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
+def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
+    """
+    Convert x from raw to standardized space if needed.
+    x_space: "raw" or "std".
+    """
+    x = x.view(-1)
+    if x_space == "std":
+        return x
+    mean = scaler.mean_.view(-1).to(x.device, x.dtype)
+    std = scaler.std_.view(-1).to(x.device, x.dtype)
+    return (x - mean) / std
 
-    model = CNNmodel["model"]
 
-    def model_scalar(pg_vector):
-        pl_t = torch.tensor(Pl, dtype=torch.float32)
-        ql_t = torch.tensor(Ql, dtype=torch.float32)
+# --- Constraint value: c(x) = F_Y(u0 | x) - (1 - alpha) ---
+def constraint_value(
+    x_param: torch.Tensor,
+    model,
+    scaler,
+    u0: float,
+    alpha: float,
+    x_space: str,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    """
+    Chance constraint:
+        c(x) = P(Y <= u0 | x) - (1 - alpha)
+             = F_Y(u0 | x) - (1 - alpha)
 
-        X = torch.cat([pg_vector, pl_t, ql_t], dim=0)
-        X = X.unsqueeze(0).unsqueeze(0)
+    We enforce c(x) >= 0.
+    """
+    # Map to standardized features for the model
+    x_std = x_to_std(x_param, scaler, x_space).view(1, -1)
+    y0 = torch.tensor([u0], device=device, dtype=dtype)
+    F_u0 = model.cdf(y0, x_std).view(())       # scalar
+    c = F_u0 - (1.0 - alpha)
+    return c
 
-        y = model(X)
-        return y.sum()    # must be scalar
+def constraint_hessian(
+    x_param: torch.Tensor,
+    model,
+    scaler,
+    u0: float,
+    alpha: float,
+    x_space: str,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    """
+    Full Hessian of the constraint c(x) with respect to x_param.
+    """
+    def f(z):
+        return constraint_value(z, model, scaler, u0, alpha, x_space, device, dtype)
 
-    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+    z = x_param.detach().clone().requires_grad_(True)
+    H = torch.autograd.functional.hessian(f, z, create_graph=False)
+    return H
 
-    H = hessian(model_scalar, pg)
+def d2TSI_dV2dP2_CNF(CNFmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
+    model = CNFmodel['model']
+    scaler = CNFmodel['scaler'] 
+    ckpt = CNFmodel['ckpt'] 
+    dtype = CNFmodel['dtype'] 
+    u0 = CNFmodel['u0'] 
+    alpha = CNFmodel['alpha'] 
+    device = CNFmodel['device'] 
+    x_space = CNFmodel['x_space'] 
+
+    # pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+    # qg = torch.tensor(Qg, dtype=torch.float32, requires_grad=True)
+    # pl = torch.tensor(Pl, dtype=torch.float32, requires_grad=False)
+    # ql = torch.tensor(Qg, dtype=torch.float32, requires_grad=False)
+
+    # X = torch.cat([pg, pl, qg, ql], dim=0)   # (N,)
+
+    # Concatenate generators first, then loads (same as training)
+    P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
+    Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
+
+    # Per-sample layout: (2, Nunits)
+    x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
+    x_test_np = x_test_np.reshape(-1)
+    X = torch.tensor(x_test_np, dtype=dtype)
+
+    H = constraint_hessian(X, model, scaler, u0, alpha, x_space, device, dtype)
 
     H = H.detach().cpu().numpy()
 

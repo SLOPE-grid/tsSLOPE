@@ -7,19 +7,6 @@ function ret_tsilib()
   return pyimport("tsslope-pump-py")
 end
 
-function get_values(tsi_f, pg, qg)
-  if JuMP.has_values(tsi_f)
-    # Use values if optimization has been performed
-    Pg_values = JuMP.value.(pg)
-    Qg_values = JuMP.value.(qg)
-  else
-    # Use start values if optimization has not been performed yet
-    Pg_values = JuMP.start_value.(pg)
-    Qg_values = JuMP.start_value.(qg)
-  end
-  return Pg_values, Qg_values
-end
-
 ### define TSI constraint
 
 function TSIConstraint(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)

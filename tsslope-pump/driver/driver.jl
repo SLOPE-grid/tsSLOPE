@@ -17,7 +17,7 @@ include(string(jl_lib,"/tsi_constraints.jl"))
 print(path_to_tsslope)
 
 # need a better way of doing this
-model_type = "CNF"
+model_type = "CNN"
 
 if model_type == "UQ_CNN"
     surrogate, data, TSI = tsslope_lib.load_model(UQ_CNN_model_path, LLNL_data_record, model_type)

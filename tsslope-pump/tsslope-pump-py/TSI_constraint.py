@@ -30,7 +30,7 @@ def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     return (x - mean) / std
 
 
-# --- Constraint value: c(x) = F_Y(u0 | x) - (1 - alpha) ---
+# --- Constraint value: c(x) = (1 - alpha) - F_Y(u0 | x) ---
 def constraint_value(
     x_param: torch.Tensor,
     model,
@@ -43,8 +43,8 @@ def constraint_value(
 ) -> torch.Tensor:
     """
     Chance constraint:
-        c(x) = P(Y <= u0 | x) - (1 - alpha)
-             = F_Y(u0 | x) - (1 - alpha)
+        c(x) = (1 - alpha) - P(Y <= u0 | x)
+             = (1 - alpha) - F_Y(u0 | x) 
 
     We enforce c(x) >= 0.
     """

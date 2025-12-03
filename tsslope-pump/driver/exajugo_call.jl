@@ -53,11 +53,17 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     end
 
     function tsih(h::AbstractMatrix, args...)
+
+        # --- your code ---
+
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
-        # print("Calculating Hessian")
+        # println("Calculating Hessian")
+        tic = time_ns()
         hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, pg_vec, qg_vec)
-        # print("Finsied Hessian")
+        toc = (time_ns() - tic) / 1e9
+        # println("Hessian calc elapsed time: $toc seconds")
+        # println("Finsied Hessian")
         # print("TSI hess constrint: ", maximum(abs.(hess)), "\n")
         for i = 1:2*N_gen
             for j = 1:i
@@ -71,14 +77,13 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
 
-    # Pl = st_args["PL"]
-    # Ql = st_args["QL"]
-    # println("Pl = [", join(Pl, ", "), "]")
-    # println("Ql = [", join(Ql, ", "), "]")
-
     register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
-    @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.5 )
+    if surrogate["model_type"] == "CNF"
+        @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.0 )
+    else
+        @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.5 )
+    end
     
     if !ispath(solution_dir)
 		mkpath(solution_dir)

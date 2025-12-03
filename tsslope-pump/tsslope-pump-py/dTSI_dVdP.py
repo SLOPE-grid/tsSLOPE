@@ -31,7 +31,7 @@ def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     return (x - mean) / std
 
 
-# --- Constraint value: c(x) = F_Y(u0 | x) - (1 - alpha) ---
+# --- Constraint value: c(x) = (1 - alpha) - F_Y(u0 | x) ---
 def constraint_value(
     x_param: torch.Tensor,
     model,
@@ -44,8 +44,8 @@ def constraint_value(
 ) -> torch.Tensor:
     """
     Chance constraint:
-        c(x) = P(Y <= u0 | x) - (1 - alpha)
-             = F_Y(u0 | x) - (1 - alpha)
+        c(x) = (1 - alpha) - P(Y <= u0 | x)
+             = (1 - alpha) - F_Y(u0 | x) 
 
     We enforce c(x) >= 0.
     """
@@ -69,9 +69,12 @@ def constraint_grad(
     """
     Return constraint value and its gradient with respect to x_param.
     """
-    x = x_param.detach().clone().requires_grad_(True)
-    c = constraint_value(x, model, scaler, u0, alpha, x_space, device, dtype)
-    (g,) = torch.autograd.grad(c, x, create_graph=False, retain_graph=False)
+    
+    c = constraint_value(x_param, model, scaler, u0, alpha, x_space, device, dtype)
+    (g,) = torch.autograd.grad(c, x_param, create_graph=False, retain_graph=False)
+    # x = x_param.detach().clone().requires_grad_(True)
+    # c = constraint_value(x, model, scaler, u0, alpha, x_space, device, dtype)
+    # (g,) = torch.autograd.grad(c, x, create_graph=False, retain_graph=False)
     return g
 
 def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
@@ -85,21 +88,22 @@ def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
     x_space = CNFmodel['x_space'] 
 
 
-    # pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
-    # qg = torch.tensor(Qg, dtype=torch.float32, requires_grad=True)
-    # pl = torch.tensor(Pl, dtype=torch.float32, requires_grad=False)
-    # ql = torch.tensor(Qg, dtype=torch.float32, requires_grad=False)
+    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+    qg = torch.tensor(Qg, dtype=torch.float32, requires_grad=True)
+    pl = torch.tensor(Pl, dtype=torch.float32, requires_grad=False)
+    ql = torch.tensor(Ql, dtype=torch.float32, requires_grad=False)
 
-    # X = torch.cat([pg, pl, qg, ql], dim=0)   # (N,)
+    X = torch.cat([pg, pl, qg, ql], dim=0)   # (N,)
 
-    # Concatenate generators first, then loads (same as training)
-    P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
-    Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
 
-    # Per-sample layout: (2, Nunits)
-    x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
-    x_test_np = x_test_np.reshape(-1)
-    X = torch.tensor(x_test_np, dtype=dtype)
+    # # Concatenate generators first, then loads (same as training)
+    # P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
+    # Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
+
+    # # Per-sample layout: (2, Nunits)
+    # x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
+    # x_test_np = x_test_np.reshape(-1)
+    # X = torch.tensor(x_test_np, dtype=dtype)
 
     g = constraint_grad(X, model, scaler, u0, alpha, x_space, device, dtype)
 

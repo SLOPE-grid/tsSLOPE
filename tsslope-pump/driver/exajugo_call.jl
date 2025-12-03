@@ -9,6 +9,8 @@ using SparseArrays
 jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/load_case.jl"))
 
+const CACHE = Dict{UInt64, Any}()
+
 function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate)
 	print("Reading instance from "*instance_dir*" ... ")
     psd = SCACOPFdata(instance_dir)
@@ -36,8 +38,8 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
         QG_full[gen_idx] = qg_vec
 
         print("TSI constrint: ", TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec),"\n")
-        # return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
-        return 1.
+        return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
+        # return 1.
     end
 
     function tsig(g::AbstractVector, args...)
@@ -46,32 +48,34 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
         # print("Calculating gradient")
         grad = TSIConstraintPrime(psd, Surrogate, st_args, pg_vec, qg_vec)
         # print("Finished gradient")
-        # print("TSI gradient constrint: ", maximum(abs.(grad)), "\n")
-        # g[1:2*N_gen] .= grad
-        g[1:2*N_gen] .= 0. .*grad
+        print("TSI gradient constrint: ", maximum(abs.(grad)), "\n")
+        g[1:2*N_gen] .= grad
+        # g[1:2*N_gen] .= 0. .*grad
         
     end
 
     function tsih(h::AbstractMatrix, args...)
 
-        # --- your code ---
-
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
-        # println("Calculating Hessian")
+        hsh = hash(pg_vec)
+
         tic = time_ns()
-        hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, pg_vec, qg_vec)
-        toc = (time_ns() - tic) / 1e9
-        # println("Hessian calc elapsed time: $toc seconds")
-        # println("Finsied Hessian")
-        # print("TSI hess constrint: ", maximum(abs.(hess)), "\n")
-        for i = 1:2*N_gen
-            for j = 1:i
-                # h[i, j] = hess[i,j]
-                h[i, j] = 0.
+        if haskey(CACHE, hsh)
+            h =  CACHE[hsh]
+            return
+        else
+            # hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, pg_vec, qg_vec)
+            for i = 1:2*N_gen
+                for j = 1:i
+                    # h[i, j] = hess[i,j]
+                    h[i, j] = 0.
+                end
             end
+            CACHE[hsh] = h
         end
-        
+        toc = (time_ns() - tic) / 1e9
+        println("Hessian calc elapsed time: $toc seconds")        
     end
 
 	# create model

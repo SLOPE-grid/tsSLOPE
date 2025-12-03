@@ -42,11 +42,13 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
   PG_full[gen_idx] = pg
   QG_full[gen_idx] = qg
 
+  println("PG_full norm: ", maximum(abs.(PG_full)))
+
   # Call Python function via PyCall
   # println("1")
   tsilib = ret_tsilib()
   dTSI = tsilib.eval_tsi_g(Surrogate, PG_full, QG_full, PL, QL, st_args)
-
+  # println("dTSI norm: ", maximum(abs.(dTSI)))
   # println("Grad TSI size:", size(dTSI))
 
   # extract gradient infomation just for active generators

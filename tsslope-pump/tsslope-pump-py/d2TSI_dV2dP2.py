@@ -53,7 +53,7 @@ def constraint_value(
     x_std = x_to_std(x_param, scaler, x_space).view(1, -1)
     y0 = torch.tensor([u0], device=device, dtype=dtype)
     F_u0 = model.cdf(y0, x_std).view(())       # scalar
-    c = F_u0 - (1.0 - alpha)
+    c = (1.0 - alpha) - F_u0
     return c
 
 def constraint_hessian(

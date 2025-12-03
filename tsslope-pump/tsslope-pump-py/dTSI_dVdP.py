@@ -53,7 +53,7 @@ def constraint_value(
     x_std = x_to_std(x_param, scaler, x_space).view(1, -1)
     y0 = torch.tensor([u0], device=device, dtype=dtype)
     F_u0 = model.cdf(y0, x_std).view(())       # scalar
-    c = F_u0 - (1.0 - alpha)
+    c = (1.0 - alpha) - F_u0
     return c
 
 def constraint_grad(
@@ -95,6 +95,8 @@ def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
 
     X = torch.cat([pg, pl, qg, ql], dim=0)   # (N,)
 
+    print(f"X norm: {max(abs(X))}")
+
 
     # # Concatenate generators first, then loads (same as training)
     # P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
@@ -106,6 +108,8 @@ def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
     # X = torch.tensor(x_test_np, dtype=dtype)
 
     g = constraint_grad(X, model, scaler, u0, alpha, x_space, device, dtype)
+    
+    print(f"dTSI norm: {max(abs(g))}")
 
     return g.detach().cpu().numpy()
 

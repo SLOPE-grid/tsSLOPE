@@ -70,8 +70,8 @@ def TSI_constraint_CNF(Surrogate, Pg, Qg, st_args):
 
     Pg_input = Pg
     Qg_input = Qg
-    Pl_input = -PL
-    Ql_input = -QL
+    Pl_input = PL
+    Ql_input = QL
 
     # Concatenate generators first, then loads (same as training)
     P_concat = np.concatenate([Pg_input, Pl_input], axis=0)  # (Ngen+Nload,)
@@ -88,6 +88,7 @@ def TSI_constraint_CNF(Surrogate, Pg, Qg, st_args):
 
 def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
     model = Surrogate['model']
+    dtype = Surrogate['dtype'] 
 
     model.eval()
 
@@ -96,12 +97,12 @@ def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
 
     Pg_input = Pg.reshape(1, -1)
     Qg_input = Qg.reshape(1, -1)
-    Pl_input = -PL.reshape(1, -1)
-    Ql_input = -QL.reshape(1, -1)
+    Pl_input = PL.reshape(1, -1)
+    Ql_input = QL.reshape(1, -1)
 
     X_np = np.hstack([Pg_input, Pl_input, Ql_input])
 
-    X = torch.tensor(X_np, dtype=torch.float32).unsqueeze(0)
+    X = torch.tensor(X_np, dtype=dtype).unsqueeze(0)
 
     pred = model(X).item()
 
@@ -111,6 +112,7 @@ def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
 def TSI_constraint_UQ_CNN(Surrogate, Pg, Qg, st_args):
     Mul_confi = st_args['Mul_confi']
     model = Surrogate['model']
+    dtype = Surrogate['dtype'] 
 
     model.eval()
 
@@ -119,12 +121,12 @@ def TSI_constraint_UQ_CNN(Surrogate, Pg, Qg, st_args):
 
     Pg_input = Pg.reshape(1, -1)
     Qg_input = Qg.reshape(1, -1)
-    Pl_input = -PL.reshape(1, -1)
-    Ql_input = -QL.reshape(1, -1)
+    Pl_input = PL.reshape(1, -1)
+    Ql_input = QL.reshape(1, -1)
 
     X_np = np.hstack([Pg_input, Pl_input, Ql_input])
 
-    X = torch.tensor(X_np, dtype=torch.float32).unsqueeze(0)
+    X = torch.tensor(X_np, dtype=dtype).unsqueeze(0)
 
     mean_pred, var_pred = model(X)
 

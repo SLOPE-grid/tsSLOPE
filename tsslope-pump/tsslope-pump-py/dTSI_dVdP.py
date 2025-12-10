@@ -70,11 +70,9 @@ def constraint_grad(
     Return constraint value and its gradient with respect to x_param.
     """
     
-    c = constraint_value(x_param, model, scaler, u0, alpha, x_space, device, dtype)
-    (g,) = torch.autograd.grad(c, x_param, create_graph=False, retain_graph=False)
-    # x = x_param.detach().clone().requires_grad_(True)
-    # c = constraint_value(x, model, scaler, u0, alpha, x_space, device, dtype)
-    # (g,) = torch.autograd.grad(c, x, create_graph=False, retain_graph=False)
+    x = x_param.detach().clone().requires_grad_(True)
+    c = constraint_value(x, model, scaler, u0, alpha, x_space, device, dtype)
+    (g,) = torch.autograd.grad(c, x, create_graph=False, retain_graph=False)
     return g
 
 def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
@@ -87,72 +85,54 @@ def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
     device = CNFmodel['device'] 
     x_space = CNFmodel['x_space'] 
 
+    # Concatenate generators first, then loads (same as training)
+    P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
+    Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
 
-    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
-    qg = torch.tensor(Qg, dtype=torch.float32, requires_grad=True)
-    pl = torch.tensor(Pl, dtype=torch.float32, requires_grad=False)
-    ql = torch.tensor(Ql, dtype=torch.float32, requires_grad=False)
-
-    X = torch.cat([pg, pl, qg, ql], dim=0)   # (N,)
-
-    print(f"X norm: {max(abs(X))}")
-
-
-    # # Concatenate generators first, then loads (same as training)
-    # P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
-    # Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
-
-    # # Per-sample layout: (2, Nunits)
-    # x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
-    # x_test_np = x_test_np.reshape(-1)
-    # X = torch.tensor(x_test_np, dtype=dtype)
+    # Per-sample layout: (2, Nunits)
+    x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
+    x_test_np = x_test_np.reshape(-1)
+    X = torch.tensor(x_test_np, dtype=dtype)
 
     g = constraint_grad(X, model, scaler, u0, alpha, x_space, device, dtype)
     
-    print(f"dTSI norm: {max(abs(g))}")
-
     return g.detach().cpu().numpy()
 
 # derivative of f(s) > tau
 def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, st_args):
 
-    Mul_confi = st_args['Mul_confi']
-    model = CNNmodel['model']
+    model = CNNmodel["model"]
+    dtype = CNNmodel['dtype'] 
 
-    # --- convert to torch ---
-    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
-    pl = torch.tensor(Pl, dtype=torch.float32, requires_grad=False)
-    ql = torch.tensor(Qg, dtype=torch.float32, requires_grad=False)
+    # build full input vector as one differentiable tensor
+    pg = torch.tensor(Pg, dtype=dtype)
+    pl = torch.tensor(Pl, dtype=dtype)
+    ql = torch.tensor(Ql, dtype=dtype)    
 
-    # --- reconstruct X in CNN input shape ---
-    X = torch.cat([pg, pl, ql], dim=0)   # (N,)
-    X = X.unsqueeze(0).unsqueeze(0)      # (1, 1, N) adjust to your CNN
+    X = torch.cat([pg, pl, ql], dim=0).requires_grad_(True)
 
-    # --- forward ---
+    X_in = X.view(1, 1, -1)
+
     model.eval()
-    y = model(X)
-    y_scalar = y.sum()                   # convert the tensor into a scalar
+    y = model(X_in).sum()
+    y.backward()
 
-    # --- backward ---
-    y_scalar.backward()
+    # gradient wrt pg are the first len(pg) components
+    grad_pg = X.grad[:len(pg)].clone()
 
-    # gradient wrt pg only
-    grad_pg = pg.grad
+    return grad_pg.detach().cpu().numpy()
 
-    # --- convert gradient to numpy array ---
-    dTSI = grad_pg.detach().cpu().numpy()
-
-    return dTSI
 
 # f = μ − β sqrt(var)
 def dTSI_dVdP_UQ_CNN(UQCNNmodel, Pg, Qg, Pl, Ql, st_args):
 
     Mul_confi = st_args['Mul_confi']
     model = UQCNNmodel['model']
+    dtype = UQCNNmodel['dtype'] 
 
     def f_scalar(pg_vector):
-        pl_t = torch.tensor(Pl, dtype=torch.float32, requires_grad=False)
-        ql_t = torch.tensor(Ql, dtype=torch.float32, requires_grad=False)
+        pl_t = torch.tensor(Pl, dtype=dtype, requires_grad=False)
+        ql_t = torch.tensor(Ql, dtype=dtype, requires_grad=False)
         
         # --- reconstruct X in CNN input shape ---
         X = torch.cat([pg, pl_t, ql_t], dim=0)   # (N,)
@@ -164,7 +144,7 @@ def dTSI_dVdP_UQ_CNN(UQCNNmodel, Pg, Qg, Pl, Ql, st_args):
         f = mean_pred - Mul_confi * torch.sqrt(var_pred + 1e-8)
         return f.squeeze()       # MUST BE SCALAR
 
-    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+    pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
 
     grad_f_pg = torch.autograd.grad(f_scalar(pg), pg, create_graph=True)[0]
     dTSI = grad_f_pg.detach().cpu().numpy()

@@ -11,9 +11,10 @@ end
 
 function TSIConstraint(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
   gen_idx = st_args["gen_idx"] .+1
-  PG_full = zeros(st_args["numb_gen"])
-  QG_full = zeros(st_args["numb_gen"])
-  
+  total_num_gen = st_args["numb_gen"]
+
+  PG_full = zeros(total_num_gen)
+  QG_full = zeros(total_num_gen)  
   PG_full[gen_idx] = pg
   QG_full[gen_idx] = qg
 
@@ -42,37 +43,27 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
   PG_full[gen_idx] = pg
   QG_full[gen_idx] = qg
 
-  println("PG_full norm: ", maximum(abs.(PG_full)))
-
   # Call Python function via PyCall
-  # println("1")
   tsilib = ret_tsilib()
   dTSI = tsilib.eval_tsi_g(Surrogate, PG_full, QG_full, PL, QL, st_args)
-  # println("dTSI norm: ", maximum(abs.(dTSI)))
-  # println("Grad TSI size:", size(dTSI))
 
   # extract gradient infomation just for active generators
   grad = zeros(2 * num_active_gen)
-  # println("In 1")
 
   # check if the gradient is with respect to just pg or both pg qg
   if length(dTSI) == total_num_gen
-    # println("In if 1")
     # gradient wrt [pg]
     grad[1:num_active_gen] = dTSI[gen_idx]
   elseif length(dTSI) == 2*total_num_gen
-    # println("In if 2")
     # gradient wrt [pg qg]
     grad[1:num_active_gen] = dTSI[gen_idx]
     grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+num_active_gen]
   else
-    # println("In if 3")
     # gradient wrt [pg pl qg ql]
     numb_gen_loads = total_num_gen + nl 
     grad[1:num_active_gen] = dTSI[gen_idx]
     grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+ numb_gen_loads]
   end
-  # println("In 2")
 
   return Float64.(grad)
 end

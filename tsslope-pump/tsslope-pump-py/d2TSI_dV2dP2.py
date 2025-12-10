@@ -72,10 +72,8 @@ def constraint_hessian(
     def f(z):
         return constraint_value(z, model, scaler, u0, alpha, x_space, device, dtype)
 
-    # z = x_param.detach().clone().requires_grad_(True)
-    # H = torch.autograd.functional.hessian(f, z, create_graph=False)
-
-    H = torch.autograd.functional.hessian(f, x_param, create_graph=False)
+    z = x_param.detach().clone().requires_grad_(True)
+    H = torch.autograd.functional.hessian(f, z, create_graph=False)
     return H
 
 def d2TSI_dV2dP2_CNF(CNFmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
@@ -88,21 +86,14 @@ def d2TSI_dV2dP2_CNF(CNFmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     device = CNFmodel['device'] 
     x_space = CNFmodel['x_space'] 
 
-    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
-    qg = torch.tensor(Qg, dtype=torch.float32, requires_grad=True)
-    pl = torch.tensor(Pl, dtype=torch.float32, requires_grad=False)
-    ql = torch.tensor(Ql, dtype=torch.float32, requires_grad=False)
+    # Concatenate generators first, then loads (same as training)
+    P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
+    Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
 
-    X = torch.cat([pg, pl, qg, ql], dim=0)   # (N,)
-
-    # # Concatenate generators first, then loads (same as training)
-    # P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
-    # Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
-
-    # # Per-sample layout: (2, Nunits)
-    # x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
-    # x_test_np = x_test_np.reshape(-1)
-    # X = torch.tensor(x_test_np, dtype=dtype)
+    # Per-sample layout: (2, Nunits)
+    x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
+    x_test_np = x_test_np.reshape(-1)
+    X = torch.tensor(x_test_np, dtype=dtype)
 
     H = constraint_hessian(X, model, scaler, u0, alpha, x_space, device, dtype)
 
@@ -113,18 +104,19 @@ def d2TSI_dV2dP2_CNF(CNFmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
     model = CNNmodel["model"]
+    dtype = CNNmodel['dtype'] 
 
     def model_scalar(pg_vector):
-        pl_t = torch.tensor(Pl, dtype=torch.float32)
-        ql_t = torch.tensor(Ql, dtype=torch.float32)
+        pl_t = torch.tensor(Pl, dtype=dtype)
+        ql_t = torch.tensor(Ql, dtype=dtype)
 
-        X = torch.cat([pg_vector, pl_t, ql_t], dim=0)
+        X = torch.cat([pg_vector.clone(), pl_t, ql_t], dim=0)
         X = X.unsqueeze(0).unsqueeze(0)
 
         y = model(X)
         return y.sum()    # must be scalar
 
-    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+    pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
 
     H = hessian(model_scalar, pg)
 
@@ -136,10 +128,11 @@ def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 def d2TSI_dV2dP2_UQ_CNN(UQ_CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     Mul_confi = st_args['Mul_confi']
     model = UQ_CNNmodel["model"]
+    dtype = UQ_CNNmodel['dtype'] 
 
     def f_scalar(pg_vector):
-        pl_t = torch.tensor(Pl, dtype=torch.float32)
-        ql_t = torch.tensor(Ql, dtype=torch.float32)
+        pl_t = torch.tensor(Pl, dtype=dtype)
+        ql_t = torch.tensor(Ql, dtype=dtype)
 
         X = torch.cat([pg_vector, pl_t, ql_t], dim=0)
         X = X.unsqueeze(0).unsqueeze(0)
@@ -150,7 +143,7 @@ def d2TSI_dV2dP2_UQ_CNN(UQ_CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
         f = mean_pred - Mul_confi * torch.sqrt(var_pred + 1e-8)
         return f.squeeze()       # MUST BE SCALAR
 
-    pg = torch.tensor(Pg, dtype=torch.float32, requires_grad=True)
+    pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
 
     H = hessian(f_scalar, pg)
 

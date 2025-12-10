@@ -50,8 +50,9 @@ function load_case_general(psd::SCACOPFdata, pf_file::String)
     # Find the indices of the active generators within all the generators in python index
     gen_idx = findall(in(active_G_idx), all_G_idx) .-1
   
-    PL = loads[!, :PL]
-    QL = loads[!, :QL]
+    # The changes that needed to be made so pl and ql to work with surrogate
+    PL = loads[!, :PL] .* 0.01
+    QL = loads[!, :QL] .* 0.01
 
     confi_level = 1
   

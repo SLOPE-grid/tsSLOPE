@@ -459,10 +459,15 @@ def load_CNFmodel(
 
     return Surrogate, data, TSI
 
-def load_CNNmodel(Model_Path, data_record):
+def load_CNNmodel(Model_Path, data_record,
+    override_dtype: Optional[str] = "float64",):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
     data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
 
     # Binary target: last column >= 0 → class 1, else 0
     TSI = data[:, -1].reshape(-1, 1)
@@ -470,21 +475,27 @@ def load_CNNmodel(Model_Path, data_record):
 
     data = data[:, :-1]
 
-    model = CNN1D_GELU_Avg()
+    model = CNN1D_GELU_Avg().double()
     
     state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
     model.load_state_dict(state_dict)
 
     Surrogate = {}
     Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
     Surrogate['model_type'] = "CNN"
 
     return Surrogate, data, TSI
 
-def load_CNNmodel(Model_Path, data_record):
+def load_UQ_CNNmodel(Model_Path, data_record,
+    override_dtype: Optional[str] = "float64",):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
     data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
 
     # Binary target: last column >= 0 → class 1, else 0
     TSI = data[:, -1].reshape(-1, 1)
@@ -492,35 +503,14 @@ def load_CNNmodel(Model_Path, data_record):
 
     data = data[:, :-1]
 
-    model = CNN1D_GELU_Avg()
-    
-    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
-    model.load_state_dict(state_dict)
-
-    Surrogate = {}
-    Surrogate['model'] = model
-    Surrogate['model_type'] = "CNN"
-
-    return Surrogate, data, TSI
-
-def load_UQ_CNNmodel(Model_Path, data_record):
-    warnings.filterwarnings("ignore")
-    data = scio.loadmat(data_record)
-    data = data['Data']
-
-    # Binary target: last column >= 0 → class 1, else 0
-    TSI = data[:, -1].reshape(-1, 1)
-    TSI = (TSI >= 0).astype(int)
-
-    data = data[:, :-1]
-
-    model = CNN1D_GELU_Avg_UQ()
+    model = CNN1D_GELU_Avg_UQ().double()
 
     state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
     model.load_state_dict(state_dict)
 
     Surrogate = {}
     Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
     Surrogate['model_type'] = "UQ_CNN"
 
     return Surrogate, data, TSI

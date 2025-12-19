@@ -11,20 +11,8 @@ import time
 def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
     if Surrogate['model_type'] == "CNN":
         return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "CNN_silu":
-        return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "CNN_Grad_UQ":
         return d2TSI_dV2dP2_CNN_Grad_UQ(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "CNN_silu_no_sig":
-        return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "UQ_CNN":
-        return d2TSI_dV2dP2_UQ_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "UQ_CNN_STD":
-        return d2TSI_dV2dP2_UQ_CNN_STD(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "UQ_CNN_SiLU":
-        return d2TSI_dV2dP2_UQ_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "UQ_CNN_SiLU_no_sig":
-        return d2TSI_dV2dP2_UQ_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "CNF":
         return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "DSPP":
@@ -136,7 +124,6 @@ def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
     return H
 
-
 # derivative of f(s) > tau
 def d2TSI_dV2dP2_CNN_Grad_UQ(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
@@ -172,62 +159,6 @@ def d2TSI_dV2dP2_CNN_Grad_UQ(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     pg)
 
     return H.detach().cpu().numpy()
-
-# f = μ − β sqrt(var)
-def d2TSI_dV2dP2_UQ_CNN(UQ_CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
-    Mul_confi = st_args['Mul_confi']
-    model = UQ_CNNmodel["model"]
-    dtype = UQ_CNNmodel['dtype'] 
-
-    def f_scalar(pg_vector):
-        pl_t = torch.tensor(Pl, dtype=dtype)
-        ql_t = torch.tensor(Ql, dtype=dtype)
-
-        X = torch.cat([pg_vector, pl_t, ql_t], dim=0)
-        X = X.unsqueeze(0).unsqueeze(0)
-
-        mean_pred, var_pred = model(X)
-
-        # f = μ − β sqrt(var)
-        f = mean_pred - Mul_confi * torch.sqrt(var_pred + 1e-8)
-        return f.squeeze()       # MUST BE SCALAR
-
-    pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
-
-    H = hessian(f_scalar, pg)
-
-    H = H.detach().cpu().numpy()
-
-    return H
-
-
-# f = μ − β std
-def d2TSI_dV2dP2_UQ_CNN_STD(UQ_CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
-    Mul_confi = st_args['Mul_confi']
-    model = UQ_CNNmodel["model"]
-    dtype = UQ_CNNmodel['dtype'] 
-
-    def f_scalar(pg_vector):
-        pl_t = torch.tensor(Pl, dtype=dtype)
-        ql_t = torch.tensor(Ql, dtype=dtype)
-
-        X = torch.cat([pg_vector, pl_t, ql_t], dim=0)
-        X = X.unsqueeze(0).unsqueeze(0)
-
-        mean_pred, std_pred = model(X)
-        std_ref = std_pred/(mean_pred*(1-mean_pred) + 1e-8)
-
-        # f = μ − β sqrt(var)
-        f = mean_pred - Mul_confi * std_ref
-        return f.squeeze()       # MUST BE SCALAR
-
-    pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
-
-    H = hessian(f_scalar, pg)
-
-    H = H.detach().cpu().numpy()
-
-    return H
 
 def d2TSI_dV2dP2_GP(GPmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     nb, ng = st_args['numb_buses'], st_args['total_numb_gens']

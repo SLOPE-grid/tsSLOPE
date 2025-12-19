@@ -58,7 +58,7 @@ function load_case_general(psd::SCACOPFdata, pf_file::String)
   
     Mul_confi = Mul_confi_get(confi_level)
 
-    beta = 9e-1
+    beta = 1e-3
   
     st_args = Dict(
         "gen_idx" => gen_idx,

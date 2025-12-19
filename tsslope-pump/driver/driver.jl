@@ -14,19 +14,34 @@ tsslope_lib = pyimport("tsslope-pump-py")
 jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/tsi_constraints.jl"))
 
-print(path_to_tsslope)
-
 # need a better way of doing this
-model_type = "UQ_CNN"
+model_type = "CNN_Grad_UQ"
 
 if model_type == "UQ_CNN"
     surrogate, data, TSI = tsslope_lib.load_model(UQ_CNN_model_path, LLNL_data_record, model_type)
+elseif model_type == "UQ_CNN_SiLU"
+    surrogate, data, TSI = tsslope_lib.load_model(UQ_CNN_SiLU_model_path, LLNL_data_record, model_type)
+elseif model_type == "UQ_CNN_STD"
+    surrogate, data, TSI = tsslope_lib.load_model(UQ_CNN_STD_model_path, LLNL_data_record, model_type)
+elseif model_type == "UQ_CNN_SiLU_no_sig"
+    surrogate, data, TSI = tsslope_lib.load_model(UQ_CNN_silu_no_sig_model_path, LLNL_data_record, model_type)
 elseif model_type == "CNN"
     surrogate, data, TSI = tsslope_lib.load_model(CNN_model_path, LLNL_data_record, model_type)
+elseif model_type == "CNN_Grad_UQ"
+    surrogate, data, TSI = tsslope_lib.load_model(CNN_silu_model_path, LLNL_data_record, model_type)
+elseif model_type == "CNN_silu"
+    surrogate, data, TSI = tsslope_lib.load_model(CNN_silu_model_path, LLNL_data_record, model_type)
+elseif model_type == "CNN_silu_no_sig"
+    surrogate, data, TSI = tsslope_lib.load_model(CNN_silu_no_sig_model_path, LLNL_data_record, model_type)
 elseif model_type == "CNF"
     surrogate, data, TSI = tsslope_lib.load_model(CNF_model_path, LLNL_data_record, model_type)
 elseif model_type == "DSPP"
     surrogate, data, TSI = tsslope_lib.load_model(model_path, LLNL_data_record, model_type)
+else
+    surrogate = Dict(
+        "model_type" => nothing,
+    )
+    println("ACOPF will run without a surrogate.")
 end
 
 TSACOPF(case_path, case_sol_path, pf_limit_file, surrogate);

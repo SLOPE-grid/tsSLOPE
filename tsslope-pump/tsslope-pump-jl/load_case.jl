@@ -25,7 +25,7 @@ function Mul_confi_get(confi_level)
     return Mul_confi
 end
 
-function load_case(psd::SCACOPFdata, pf_file::String, case_type::String)
+function load_case(psd::SCACOPFdata, pf_file::String, case_type)
     if case_type == "DSSP"
         return load_case_DSSP(psd, pf_file)
     else
@@ -54,9 +54,11 @@ function load_case_general(psd::SCACOPFdata, pf_file::String)
     PL = loads[!, :PL] .* 0.01
     QL = loads[!, :QL] .* 0.01
 
-    confi_level = 1
+    confi_level = 0
   
     Mul_confi = Mul_confi_get(confi_level)
+
+    beta = 9e-1
   
     st_args = Dict(
         "gen_idx" => gen_idx,
@@ -68,6 +70,8 @@ function load_case_general(psd::SCACOPFdata, pf_file::String)
         "QL" => QL,
         "num_J_H" => 0,
         "Mul_confi" => Mul_confi,
+        "beta" => beta,
+        # "Mul_confi" => 0.0,
     )
   
     return st_args

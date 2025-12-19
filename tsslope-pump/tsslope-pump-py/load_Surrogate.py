@@ -355,6 +355,113 @@ class CNN1D_GELU_Avg_UQ(nn.Module):
 
         return mean, var
 
+class UQ_CNN_SiLU(nn.Module):
+    def __init__(self):
+        super(UQ_CNN_SiLU, self).__init__()
+
+        # Shared feature extractor (same as your original but without final layers)
+        self.features = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AdaptiveAvgPool1d(1),  # output shape: [batch, 64, 1]
+            nn.Flatten(),             # shape: [batch, 64]
+        )
+
+        # Two output heads: mean and log-variance
+        self.fc_mean = nn.Linear(64, 1)
+        self.fc_logvar = nn.Linear(64, 1)
+
+    def forward(self, x):
+        h = self.features(x)
+
+        # Mean should be in [0,1] (classification probability)
+        mean = torch.sigmoid(self.fc_mean(h))
+
+        # log-variance → variance > 0
+        logvar = self.fc_logvar(h)
+        var = torch.exp(logvar)
+
+        return mean, var
+
+class UQ_CNN_SiLU_No_Sig(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.features = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+        )
+
+        # Logit mean and log-variance
+        self.fc_mu = nn.Linear(64, 1)
+        self.fc_logvar = nn.Linear(64, 1)
+
+    def forward(self, x):
+        h = self.features(x)
+        mu = self.fc_mu(h)              # logit mean
+        logvar = self.fc_logvar(h)
+        var = torch.exp(logvar)         # logit variance
+        return mu, var
+
+class UQ_CNN_SiLU_std(nn.Module):
+    """
+    CNN surrogate with uncertainty.
+
+    Outputs:
+      mean(x) ∈ (0,1)  → probability of instability
+      std(x)  > 0      → predictive standard deviation
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.features = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.SiLU(),
+
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+        )
+
+        self.fc_mean   = nn.Linear(64, 1)
+        self.fc_logstd = nn.Linear(64, 1)
+
+        # Good initial uncertainty scale
+        # nn.init.zeros_(self.fc_logstd.weight)
+        # nn.init.constant_(self.fc_logstd.bias, -1.5)  # std ≈ 0.22
+
+    def forward(self, x):
+        h = self.features(x)
+
+        mean = torch.sigmoid(self.fc_mean(h))
+
+        log_std = self.fc_logstd(h)
+        std = torch.exp(log_std)
+
+        return mean, std
+
 class CNN1D_GELU_Avg(nn.Module):
     def __init__(self):
         super(CNN1D_GELU_Avg, self).__init__()
@@ -376,22 +483,81 @@ class CNN1D_GELU_Avg(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+class CNN1D_silu_No_sig(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
 
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.SiLU(),
+
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+
+            nn.Linear(64, 1)  # <-- logit output
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+class CNN1D_silu(nn.Module):
+    def __init__(self):
+        super(CNN1D_silu, self).__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
 
 
 def load_surrogate(Model_Path, data_record, model_type):
     if model_type == "CNN":
-        return load_CNNmodel(Model_Path, data_record)
-    if model_type == "UQ_CNN":
-        return load_UQ_CNNmodel(Model_Path, data_record)
-    if model_type == "CNF":
-        return load_CNFmodel(Model_Path, data_record)
+        return load_CNNmodel(Model_Path, data_record, model_type)
+    elif model_type == "UQ_CNN":
+        return load_UQ_CNNmodel(Model_Path, data_record, model_type)
+    elif model_type == "UQ_CNN_STD":
+        return load_UQ_CNN_STDmodel(Model_Path, data_record, model_type)
+    elif model_type == "UQ_CNN_SiLU":
+        return load_UQ_CNN_SiLU_model(Model_Path, data_record, model_type)
+    elif model_type == "UQ_CNN_SiLU_no_sig":
+        return load_UQ_CNN_SiLU_no_sig_model(Model_Path, data_record, model_type)
+    elif model_type == "CNN_Grad_UQ":
+        return load_CNN_silu_model(Model_Path, data_record, model_type)
+    elif model_type == "CNN_silu":
+        return load_CNN_silu_model(Model_Path, data_record, model_type)
+    elif model_type == "CNN_silu_no_sig":
+        return load_CNN_silu_no_sig_model(Model_Path, data_record, model_type)
+    elif model_type == "CNF":
+        return load_CNFmodel(Model_Path, data_record, model_type)
     elif model_type == "DSPP":
-        return load_GPmodel(Model_Path, data_record)
+        return load_GPmodel(Model_Path, data_record, model_type)
+    else:
+        raise ValueError("Incorrect model_type")
+
      
 def load_CNFmodel(
     ckpt_path: str,
     data_record:str,
+    model_type,
     device: torch.device = torch.device("cpu"),
     override_dtype: Optional[str] = "float64",
 ):
@@ -455,11 +621,11 @@ def load_CNFmodel(
     Surrogate['alpha'] = alpha
     Surrogate['device'] = device
     Surrogate['x_space'] = x_space
-    Surrogate['model_type'] = "CNF"
+    Surrogate['model_type'] = model_type
 
     return Surrogate, data, TSI
 
-def load_CNNmodel(Model_Path, data_record,
+def load_CNNmodel(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64",):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
@@ -483,11 +649,67 @@ def load_CNNmodel(Model_Path, data_record,
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = "CNN"
+    Surrogate['model_type'] = model_type
 
     return Surrogate, data, TSI
 
-def load_UQ_CNNmodel(Model_Path, data_record,
+def load_CNN_silu_model(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = CNN1D_silu().double()
+    
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_CNN_silu_no_sig_model(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = CNN1D_silu_No_sig().double()
+    
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_UQ_CNNmodel(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64",):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
@@ -511,11 +733,96 @@ def load_UQ_CNNmodel(Model_Path, data_record,
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = "UQ_CNN"
+    Surrogate['model_type'] = model_type
 
     return Surrogate, data, TSI
 
-def load_GPmodel(Model_Path, data_record):
+
+def load_UQ_CNN_STDmodel(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = UQ_CNN_SiLU_std().double()
+
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_UQ_CNN_SiLU_model(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = UQ_CNN_SiLU().double()
+
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_UQ_CNN_SiLU_no_sig_model(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = UQ_CNN_SiLU_No_Sig().double()
+
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_GPmodel(Model_Path, data_record, model_type):
     batch_size = 500  # Size of minibatch
     milestones = [20, 150, 300]  # Epochs at which we will lower the learning rate by a factor of 0.1
     num_inducing_pts = 300  # Number of inducing points in each hidden layer 97.8, 8.0
@@ -585,7 +892,7 @@ def load_GPmodel(Model_Path, data_record):
     GPmodel['X_min'] = X_min / 100
     GPmodel['y_mean'] = y_mean
     GPmodel['y_std'] = y_std
-    GPmodel['model_type'] = "DSPP"
+    GPmodel['model_type'] = model_type
 
     data = data.numpy()
     TSI = TSI.numpy()

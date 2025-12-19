@@ -15,7 +15,7 @@ jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/tsi_constraints.jl"))
 
 # need a better way of doing this
-model_type = "CNN_Grad_UQ"
+model_type = "CNN"
 
 if model_type == "CNN"
     surrogate, data, TSI = tsslope_lib.load_model(CNN_model_path, LLNL_data_record, model_type)

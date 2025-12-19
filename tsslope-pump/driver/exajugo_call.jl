@@ -34,7 +34,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
             pg_vec = collect(args[1:N_gen])
             qg_vec = collect(args[N_gen+1:2*N_gen])
     
-            print("TSI constrint: ", TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec),"\n")
+            # print("TSI constrint: ", TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec),"\n")
             return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
         end
     
@@ -68,7 +68,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
         register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
         if Surrogate["model_type"] == "CNF"
-            st_args["PL"] = -st_args["PL"]
+            # st_args["PL"] = -st_args["PL"]
             st_args["QL"] = -st_args["QL"]
             @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.0 )
         else

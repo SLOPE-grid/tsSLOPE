@@ -52,7 +52,7 @@ function load_case_general(psd::SCACOPFdata, pf_file::String)
   
     # The changes that needed to be made so pl and ql to work with surrogate
     PL = loads[!, :PL] .* 0.01
-    QL = loads[!, :QL] .* 0.01
+    QL = -loads[!, :QL] .* 0.01
 
     confi_level = 0
   

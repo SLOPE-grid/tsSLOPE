@@ -8,14 +8,14 @@ from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
 import time
 
 def TSI_constraint(Surrogate, Pg, Qg, st_args):
-    if Surrogate['model_type'] == "CNN":
-        return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
-    elif Surrogate['model_type'] == "CNN_Grad_UQ":
-        return TSI_constraint_CNN_Grad_UQ(Surrogate, Pg, Qg, st_args)
-    elif Surrogate['model_type'] == "CNF":
-        return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
-    elif Surrogate['model_type'] == "DSPP":
-        return TSI_constraint_GP(Surrogate, Pg, Qg, st_args)
+    # if Surrogate['model_type'] == "CNN":
+    return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
+    # elif Surrogate['model_type'] == "CNN_Grad_UQ":
+    #     return TSI_constraint_CNN_Grad_UQ(Surrogate, Pg, Qg, st_args)
+    # elif Surrogate['model_type'] == "CNF":
+    #     return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
+    # elif Surrogate['model_type'] == "DSPP":
+    #     return TSI_constraint_GP(Surrogate, Pg, Qg, st_args)
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """

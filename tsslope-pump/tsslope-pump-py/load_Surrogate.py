@@ -342,10 +342,141 @@ class CNN1D(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+class CNN1D_SiLU(nn.Module):
+    def __init__(self):
+        super(CNN1D_SiLU, self).__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.SiLU(),
+            nn.AdaptiveAvgPool1d(1),
+
+            nn.Flatten(),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
+    
+class CNN1D_GELU(nn.Module):
+    def __init__(self):
+        super(CNN1D_GELU, self).__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AdaptiveAvgPool1d(1),
+
+            nn.Flatten(),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
+    
+class CNN1D_Sigmoid(nn.Module):
+    def __init__(self):
+        super(CNN1D_Sigmoid, self).__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.Sigmoid(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.Sigmoid(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.Sigmoid(),
+            nn.AdaptiveAvgPool1d(1),
+
+            nn.Flatten(),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
+    
+class CNN1D_Tanh(nn.Module):
+    def __init__(self):
+        super(CNN1D_Tanh, self).__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.Tanh(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.Tanh(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.Tanh(),
+            nn.AdaptiveAvgPool1d(1),
+
+            nn.Flatten(),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
+    
+class CNN1D_Softplus(nn.Module):
+    def __init__(self):
+        super(CNN1D_Softplus, self).__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.Softplus(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.Softplus(),
+            nn.AvgPool1d(2),
+
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.Softplus(),
+            nn.AdaptiveAvgPool1d(1),
+
+            nn.Flatten(),
+            nn.Linear(64, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
+   
+
 
 def load_surrogate(Model_Path, data_record, model_type):
     if model_type == "CNN":
         return load_CNNmodel(Model_Path, data_record, model_type)
+    elif model_type == "CNN_SiLU":
+        return load_CNNmodel_SiLU(Model_Path, data_record, model_type)
+    elif model_type == "CNN_GELU":
+        return load_CNNmodel_GELU(Model_Path, data_record, model_type)
+    elif model_type == "CNN_Sig":
+        return load_CNNmodel_Sig(Model_Path, data_record, model_type)
+    elif model_type == "CNN_Tanh":
+        return load_CNNmodel_Tanh(Model_Path, data_record, model_type)
+    elif model_type == "CNN_Soft":
+        return load_CNNmodel_Soft(Model_Path, data_record, model_type)
     elif model_type == "CNN_Grad_UQ":
         return load_CNNmodel(Model_Path, data_record, model_type)
     elif model_type == "CNF":
@@ -444,6 +575,148 @@ def load_CNNmodel(Model_Path, data_record, model_type,
     data = data[:, :-1]
 
     model = CNN1D().double()
+    
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+
+def load_CNNmodel_SiLU(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = CNN1D_SiLU().double()
+    # model = CNN1D_SiLU()
+    
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_CNNmodel_GELU(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = CNN1D_GELU().double()
+    
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_CNNmodel_Sig(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = CNN1D_Sigmoid().double()
+    
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_CNNmodel_Tanh(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = CNN1D_Tanh().double()
+    
+    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    Surrogate = {}
+    Surrogate['model'] = model
+    Surrogate['dtype'] = dtype
+    Surrogate['model_type'] = model_type
+
+    return Surrogate, data, TSI
+
+def load_CNNmodel_Soft(Model_Path, data_record, model_type,
+    override_dtype: Optional[str] = "float64",):
+    warnings.filterwarnings("ignore")
+    data = scio.loadmat(data_record)
+    data = data['Data']
+
+    if override_dtype is not None:
+        override_dtype = override_dtype.lower()
+    dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+
+    # Binary target: last column >= 0 → class 1, else 0
+    TSI = data[:, -1].reshape(-1, 1)
+    TSI = (TSI >= 0).astype(int)
+
+    data = data[:, :-1]
+
+    model = CNN1D_Softplus().double()
     
     state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
     model.load_state_dict(state_dict)

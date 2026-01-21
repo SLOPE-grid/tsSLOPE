@@ -9,14 +9,14 @@ import time
 
 def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, st_args):
 
-    if Surrogate['model_type'] == "CNN":
-        return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
-    elif Surrogate['model_type'] == "CNN_Grad_UQ":
-        return dTSI_dVdP_CNN_Grad_UQ(Surrogate, Pg, Qg, Pl, Ql, st_args)
-    elif Surrogate['model_type'] == "CNF":
-        return dTSI_dVdP_CNF(Surrogate, Pg, Qg, Pl, Ql, st_args)
-    elif Surrogate['model_type'] == "DSPP":
-        return dTSI_dVdP_GP(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    # if Surrogate['model_type'] == "CNN":
+    return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    # elif Surrogate['model_type'] == "CNN_Grad_UQ":
+    #     return dTSI_dVdP_CNN_Grad_UQ(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    # elif Surrogate['model_type'] == "CNF":
+    #     return dTSI_dVdP_CNF(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    # elif Surrogate['model_type'] == "DSPP":
+    #     return dTSI_dVdP_GP(Surrogate, Pg, Qg, Pl, Ql, st_args)
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """

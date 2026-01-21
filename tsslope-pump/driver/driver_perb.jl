@@ -27,11 +27,10 @@ psd = SCACOPFdata(case_path)
 tau = 0.5
 
 D = Dict{String, Vector{String}}()
-D["CNN_GELU"] = [CNN_GELU_1_model_path, CNN_GELU_2_model_path, CNN_GELU_3_model_path, CNN_GELU_4_model_path, CNN_GELU_5_model_path]
-D["CNN_Sig"]  = [CNN_Sig_1_model_path , CNN_Sig_2_model_path , CNN_Sig_3_model_path , CNN_Sig_4_model_path , CNN_Sig_5_model_path ]
-D["CNN_SiLU"] = [CNN_SiLU_1_model_path, CNN_SiLU_2_model_path, CNN_SiLU_3_model_path, CNN_SiLU_4_model_path, CNN_SiLU_5_model_path, CNN_model_path]
-D["CNN_Soft"] = [CNN_Soft_1_model_path, CNN_Soft_2_model_path, CNN_Soft_3_model_path, CNN_Soft_4_model_path, CNN_Soft_5_model_path] 
-D["CNN_Tanh"] = [CNN_Tanh_1_model_path, CNN_Tanh_2_model_path, CNN_Tanh_3_model_path, CNN_Tanh_4_model_path, CNN_Tanh_5_model_path] 
+D["CNN_GELU"] = [CNN_GELU_4_model_path]
+D["CNN_SiLU"] = [CNN_SiLU_2_model_path, CNN_model_path]
+D["CNN_Soft"] = [CNN_Soft_5_model_path] 
+D["CNN_Tanh"] = [CNN_Tanh_1_model_path] 
 
 results_perb = Dict{Int, Dict{String, Dict{Int, NamedTuple}}}()
 t0 = time()

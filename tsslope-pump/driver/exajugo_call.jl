@@ -1,6 +1,7 @@
 
 using Ipopt, JuMP, Printf
 using SCACOPFSubproblems
+const MOI = JuMP.MOI
 
 using MAT
 using LinearAlgebra
@@ -11,16 +12,15 @@ include(string(jl_lib,"/load_case.jl"))
 
 const CACHE = Dict{UInt64, Any}()
 
-function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate)
-	print("Reading instance from "*instance_dir*" ... ")
-    psd = SCACOPFdata(instance_dir)
+function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau)
 	print("done.\nCreating index lists for TSI constraint ...")
 	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
 		
 	print("done.\nSolving basecase using sparse OPF ...")
 	opt = optimizer_with_attributes(Ipopt.Optimizer,
 		                            # "linear_solver" => "ma57",
-		                            "sb" => "yes")
+		                            "sb" => "yes",
+                                    "max_iter" =>  200,)
                   
     # get primal starting point
     x0 = get_primal_starting_point(psd)
@@ -68,11 +68,11 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
         register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
         if Surrogate["model_type"] == "CNF"
-            # st_args["PL"] = -st_args["PL"]
-            st_args["QL"] = -st_args["QL"]
+            st_args["PL"] = -st_args["PL"]
+            # st_args["QL"] = -st_args["QL"]
             @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.0 )
         else
-            @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.5 )
+            @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= tau )
         end
         
         if !ispath(solution_dir)
@@ -82,7 +82,15 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="output")
     
-	# print("done. Objective value: \$", round(solution.base_cost, digits=1),
-	# 	".\nWriting solution to "*solution_dir*" ... \n")
+    total_time = MOI.get(m, MOI.SolveTimeSec())
+
+    termination_status = MOI.get(m, MOI.TerminationStatus())
+    num_iter = MOI.get(m, MOI.BarrierIterations())
+    Surr_Feasibility_margin = TSIConstraint(psd, Surrogate, st_args, solution.p_g, solution.q_g) - tau
+    
+	print("done. Objective value: \$", round(solution.base_cost, digits=1),
+		".\nWriting solution to "*solution_dir*" ... \n")
+
+    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status
 
 end

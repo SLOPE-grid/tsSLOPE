@@ -9,14 +9,14 @@ from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
 import time
 
 def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
-    if Surrogate['model_type'] == "CNN":
-        return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "CNN_Grad_UQ":
-        return d2TSI_dV2dP2_CNN_Grad_UQ(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "CNF":
-        return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    elif Surrogate['model_type'] == "DSPP":
-        return d2TSI_dV2dP2_Gp(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    # if Surrogate['model_type'] == "CNN":
+    return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    # elif Surrogate['model_type'] == "CNN_Grad_UQ":
+    #     return d2TSI_dV2dP2_CNN_Grad_UQ(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    # elif Surrogate['model_type'] == "CNF":
+    #     return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    # elif Surrogate['model_type'] == "DSPP":
+    #     return d2TSI_dV2dP2_Gp(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """

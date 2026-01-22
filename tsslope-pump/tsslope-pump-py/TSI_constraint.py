@@ -65,11 +65,13 @@ def TSI_constraint_CNF(Surrogate, Pg, Qg, st_args):
     device = Surrogate['device'] 
     x_space = Surrogate['x_space'] 
 
+    gen_idx = st_args['gen_idx']
+
     PL = st_args['PL']
     QL = st_args['QL']
 
-    Pg_input = Pg
-    Qg_input = Qg
+    Pg_input = Pg[gen_idx]
+    Qg_input = Qg[gen_idx]
     Pl_input = PL
     Ql_input = QL
 

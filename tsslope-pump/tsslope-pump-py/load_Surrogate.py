@@ -375,7 +375,7 @@ def load_CNFmodel(
     Load a trained ConditionalCDF model and its StandardScalerTorch from a checkpoint.
     """
     ckpt = torch.load(ckpt_path, map_location=device)
-
+    
     # infer dtype from checkpoint unless overridden
     def _first_tensor_dtype(d):
         if isinstance(d, dict):
@@ -403,6 +403,7 @@ def load_CNFmodel(
 
     model = ConditionalCDF(x_dim=x_dim, hidden=hidden, n_quad=n_quad, device=device).to(dtype)
     model.load_state_dict(ckpt["state_dict"])
+
     model = model.to(dtype).to(device).eval()
 
     scaler = StandardScalerTorch()

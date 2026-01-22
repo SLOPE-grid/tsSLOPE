@@ -86,9 +86,11 @@ def d2TSI_dV2dP2_CNF(CNFmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     device = CNFmodel['device'] 
     x_space = CNFmodel['x_space'] 
 
+    gen_idx = st_args['gen_idx']
+
     # Concatenate generators first, then loads (same as training)
-    P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
-    Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
+    P_concat = np.concatenate([Pg[gen_idx], Pl], axis=0)  # (Ngen+Nload,)
+    Q_concat = np.concatenate([Qg[gen_idx], Ql], axis=0)  # (Ngen+Nload,)
 
     # Per-sample layout: (2, Nunits)
     x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)

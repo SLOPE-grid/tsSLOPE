@@ -21,8 +21,6 @@ if model_type == "CNN"
     surrogate, data, TSI = tsslope_lib.load_model(CNN_model_path, LLNL_data_record, model_type)
 elseif model_type == "CNN_Grad_UQ"
     surrogate, data, TSI = tsslope_lib.load_model(CNN_model_path, LLNL_data_record, model_type)
-elseif model_type == "CNF"
-    surrogate, data, TSI = tsslope_lib.load_model(CNF_model_path, LLNL_data_record, model_type)
 elseif model_type == "CNF_min"
     model_type = "CNF"
     surrogate, data, TSI = tsslope_lib.load_model(CNF_model_min_path, LLNL_data_record, model_type)

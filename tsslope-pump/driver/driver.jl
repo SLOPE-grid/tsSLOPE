@@ -56,7 +56,7 @@ for j =1:3
 
             surrogate, data, TSI = tsslope_lib.load_model(path, LLNL_data_record, model_type)
 
-            num_iter, total_time, base_cost, Surr_Feasibility_margin, termination_status = TSACOPF(case_path, case_sol_path, pf_limit_file, surrogate, psd_temp, tau);
+            num_iter, total_time, base_cost, Surr_Feasibility_margin, termination_status, norm_grad = TSACOPF(case_path, case_sol_path, pf_limit_file, surrogate, psd_temp, tau);
             println("num_iter: $num_iter,\n total_time: $total_time,\n base_cost: $base_cost,\n termination_status: $termination_status,\n Surr_Feasibility_margin: $Surr_Feasibility_margin")
             # store results for iteration i
             if num_iter < 200
@@ -65,6 +65,7 @@ for j =1:3
                     total_time = total_time,
                     base_cost = base_cost,
                     Surr_Feasibility_margin = Surr_Feasibility_margin,
+                    norm_grad = norm_grad
                     termination_status = termination_status,
                     perb = perb,
                     model_path = path
@@ -90,6 +91,7 @@ for (j, results) in results_perb
                 num_iter = r.num_iter,
                 total_time = r.total_time,
                 base_cost = r.base_cost,
+                norm_grad = r.norm_grad,
                 Surr_Feasibility_margin = r.Surr_Feasibility_margin,
                 perb = r.perb,
                 termination_status = r.termination_status,

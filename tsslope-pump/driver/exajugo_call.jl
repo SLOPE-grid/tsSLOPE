@@ -68,8 +68,6 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
         register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
         if Surrogate["model_type"] == "CNF"
-            st_args["PL"] = -st_args["PL"]
-            # st_args["QL"] = -st_args["QL"]
             @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.0 )
         else
             @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= tau )
@@ -86,11 +84,19 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 
     termination_status = MOI.get(m, MOI.TerminationStatus())
     num_iter = MOI.get(m, MOI.BarrierIterations())
-    Surr_Feasibility_margin = TSIConstraint(psd, Surrogate, st_args, solution.p_g, solution.q_g) - tau
-    
+
+    if Surrogate["model_type"] == nothing
+        Surr_Feasibility_margin = NaN
+        norm_grad = NaN
+    else
+        Surr_Feasibility_margin = TSIConstraint(psd, Surrogate, st_args, solution.p_g, solution.q_g) - tau
+        grad = TSIConstraintPrime(psd, Surrogate, st_args, solution.p_g, solution.q_g)
+        norm_grad = dot(grad, grad)
+    end
+        
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
 		".\nWriting solution to "*solution_dir*" ... \n")
 
-    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status
+    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad
 
 end

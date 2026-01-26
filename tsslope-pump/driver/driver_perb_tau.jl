@@ -24,11 +24,7 @@ end
 print("Reading instance from "*case_path*" ... ")
 psd = SCACOPFdata(case_path)
 
-numb_runs = 50
-
-tau = 0.5
-
-perc = 0.15 # and then 8%
+taus = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.80, 0.85, 0.90, 0.95]
 
 D = Dict{String, Vector{String}}()
 D["None"] = [""]
@@ -47,21 +43,13 @@ results = Dict(
 
 t0 = time()
 
-for j = 1:numb_runs
-    psd_temp = deepcopy(psd)   # IMPORTANT
-
-    if j == 1
-        perb = false
-    else
-        perb = true
-        psd_temp.N.Pd = perturb_percent(psd.N.Pd, eps = perc)
-        psd_temp.N.Qd = perturb_percent(psd.N.Qd, eps = perc)
-    end
+for j = 1:length(taus)
+    tau = taus[j]
 
     for (model_type, model_paths) in D
         path = model_paths[1]   # exactly one model per activation
 
-        println("Model: $model_type, perturbation $j")
+        println("Model: $model_type, tau $tau")
 
         model_type_tmp = model_type
         model_type_load = model_type == "CNN_SiLU_OG" ? "CNN_SiLU" : model_type
@@ -82,13 +70,15 @@ for j = 1:numb_runs
                 case_sol_path,
                 pf_limit_file,
                 surrogate,
-                psd_temp,
+                psd,
                 tau
             )
 
         conv = num_iter < 200 ? 1 : 0
 
+        # store the finally norm grad
         tmp = (
+            tau = tau,
             num_iter = num_iter,
             total_time = total_time,
             base_cost = base_cost,
@@ -111,7 +101,7 @@ for (model_name, perb_dict) in results
     for (j, r) in perb_dict
         push!(rows, (
             model = model_name,
-            perturbation_id = j,
+            tau = r.tau,
             num_iter = r.num_iter,
             total_time = r.total_time,
             base_cost = r.base_cost,
@@ -124,4 +114,7 @@ for (model_name, perb_dict) in results
 end
 
 df = DataFrame(rows)
-CSV.write("results_perc_$perc.csv", df)
+CSV.write("results_tau.csv", df)
+
+
+

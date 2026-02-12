@@ -1,138 +1,112 @@
 # method to generate a TSI constraint
 #
-# Inputs: - GPmodel
+# Inputs: - Surrogate
 using PyCall
 
 function ret_tsilib()
-
-       return pyimport("tsslope-pump-py")
-       end
-
+  return pyimport("tsslope-pump-py")
+end
 
 ### define TSI constraint
 
-struct TSIConstraint
-    psd_::SCACOPFdata
-    GPmodel_::Dict
-    st_args_::Dict
-    function TSIConstraint(psd::SCACOPFdata, GPmodel::Dict, st_args::Dict)
-        psd_tmp = psd
-        GPmodel_tmp = GPmodel
-        st_args_tmp = st_args
-        
-        return new(psd_tmp,GPmodel_tmp,st_args_tmp)
-    end
-  end
-  
-  function (tsi_f::TSIConstraint)(pg,qg)
+function TSIConstraint(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
+  gen_idx = st_args["gen_idx"] .+1
+  total_num_gen = st_args["numb_gen"]
 
-    tsilib = ret_tsilib() 
-    
-    Pg = pg
-    Qg = qg
-    Pg_values = JuMP.value.(Pg)
-    Qg_values = JuMP.value.(Qg)
+  PG_full = zeros(total_num_gen)
+  QG_full = zeros(total_num_gen)  
+  PG_full[gen_idx] = pg
+  QG_full[gen_idx] = qg
 
-    pgen_ls = tsi_f.st_args_["pgen_ls"] .+ 1
-    disp_load = tsi_f.st_args_["disp_load"] .+ 1
-    PG_full = zeros(length(pgen_ls)+length(disp_load))
-    QG_full = zeros(length(pgen_ls)+length(disp_load))
-    
-    PG_full[pgen_ls] = Pg_values
-    QG_full[pgen_ls] = Qg_values
-    
-    condition = tsi_f.psd_.N[:, :Pd] .> 0
-    load_bus_indices = findall(condition)
-  
-    PG_full[disp_load] = tsi_f.psd_.N[load_bus_indices, :Pd]
-    QG_full[disp_load] = tsi_f.psd_.N[load_bus_indices, :Qd]
-    
-    # Call the Python function
-    TSI_f = tsilib.eval_tsi_f(tsi_f.GPmodel_, PG_full, QG_full, tsi_f.st_args_)
+  # Call the Python function
+  tsilib = ret_tsilib() 
+  TSI_f = tsilib.eval_tsi_f(Surrogate, PG_full, QG_full, st_args)
 
-    return Float32(TSI_f[1])
+  return Float64(TSI_f[1])
+end
 
-  end
-  
-  struct TSIConstraintPrime
-    psd_::SCACOPFdata
-    GPmodel_::Dict
-    st_args_::Dict
-    function TSIConstraintPrime(psd::SCACOPFdata, GPmodel::Dict, st_args::Dict)
-        psd_tmp = psd
-        GPmodel_tmp = GPmodel
-        st_args_tmp = st_args
-        return new(psd_tmp,GPmodel_tmp,st_args_tmp)
-    end
-  end
-  
-  function (tsi_g::TSIConstraintPrime)(pg,qg)
+### define first derivative for the TSI constraint
 
-    tsilib = ret_tsilib()
-    
-    disp_load = tsi_g.st_args_["disp_load"]
-    pgen_ls = tsi_g.st_args_["pgen_ls"]
-    gen_idx = tsi_g.st_args_["gen_idx"]
-    
-    nb = 500
-    ng = 90
-    
-    Pg = pg
-    Qg = qg
-    Pg_GP = JuMP.value.(Pg)
-    Qg_GP = JuMP.value.(Qg)
-    
-    condition = tsi_g.psd_.N[:, :Pd] .> 0
-    load_bus_indices = findall(condition)
-  
-    Pl_GP = tsi_g.psd_.N[load_bus_indices, :Pd]
-    Ql_GP = tsi_g.psd_.N[load_bus_indices, :Qd]
-  
-    # Call the Python function
-    dTSI = tsilib.eval_tsi_g(tsi_g.GPmodel_, Pg_GP, Qg_GP, Pl_GP, Ql_GP, nb, ng, tsi_g.st_args_)
-  
-    return Float32(dTSI)
-  end
-  
-  struct TSIConstraintPrimePrime
-    psd_::SCACOPFdata
-    GPmodel_::Dict
-    st_args_::Dict
-    function TSIConstraintPrimePrime(psd::SCACOPFdata, GPmodel::Dict, st_args::Dict)
-        psd_tmp = psd
-        GPmodel_tmp = GPmodel
-        st_args_tmp = st_args
-        return new(psd_tmp,GPmodel_tmp,st_args_tmp)
-    end
-  end
-  
-  function (tsi_h::TSIConstraintPrimePrime)(pg,qg)
+function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
 
-    tsilib = ret_tsilib()
-    
-    disp_load = tsi_h.st_args_["disp_load"]
-    pgen_ls = tsi_h.st_args_["pgen_ls"]
-    gen_idx = tsi_h.st_args_["gen_idx"]
-    
-    nb = 500
-    ng = 90
-    
-    Pg = pg
-    Qg = qg
-    Pg_GP = JuMP.value.(Pg)
-    Qg_GP = JuMP.value.(Qg)
-    
-    condition = tsi_h.psd_.N[:, :Pd] .> 0
-    load_bus_indices = findall(condition)
-  
-    Pl_GP = tsi_h.psd_.N[load_bus_indices, :Pd]
-    Ql_GP = tsi_h.psd_.N[load_bus_indices, :Qd]
-  
-    muTSI = 1.0
-    
-    # Call the Python function
-    dTSI = tsilib.eval_tsi_h(tsi_g.GPmodel_, Pg_GP, Qg_GP, Pl_GP, Ql_GP, nb, ng, muTSI, tsi_g.st_args_)
-  
-    return dTSI
+  # Load information
+  PL = st_args["PL"]
+  QL = st_args["QL"]
+
+  total_num_gen = st_args["numb_gen"]
+  num_active_gen = st_args["numb_active_gen"]
+  nl = st_args["numb_loads"]
+
+  gen_idx = st_args["gen_idx"] .+1
+  PG_full = zeros(total_num_gen)
+  QG_full = zeros(total_num_gen)
+  PG_full[gen_idx] = pg
+  QG_full[gen_idx] = qg
+
+  # Call Python function via PyCall
+  tsilib = ret_tsilib()
+  dTSI = tsilib.eval_tsi_g(Surrogate, PG_full, QG_full, PL, QL, st_args)
+
+  # extract gradient infomation just for active generators
+  grad = zeros(2 * num_active_gen)
+
+  # check if the gradient is with respect to just pg or both pg qg
+  if length(dTSI) == total_num_gen
+    # gradient wrt [pg]
+    grad[1:num_active_gen] = dTSI[gen_idx]
+  elseif length(dTSI) == 2*total_num_gen
+    # gradient wrt [pg qg]
+    grad[1:num_active_gen] = dTSI[gen_idx]
+    grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+num_active_gen]
+  else
+    # gradient wrt [pg pl qg ql]
+    numb_gen_loads = total_num_gen + nl 
+    grad[1:num_active_gen] = dTSI[gen_idx]
+    grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+ numb_gen_loads]
   end
-  
+
+  return Float64.(grad)
+end
+
+### define second derivative for the TSI constraint
+
+function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
+
+  # Load information
+  PL = st_args["PL"]
+  QL = st_args["QL"]
+
+  muTSI = 1.0
+
+  total_num_gen = st_args["numb_gen"]
+  num_active_gen = st_args["numb_active_gen"]
+  nl = st_args["numb_loads"]
+
+  gen_idx = st_args["gen_idx"] .+1
+  PG_full = zeros(st_args["numb_gen"])
+  QG_full = zeros(st_args["numb_gen"])
+  PG_full[gen_idx] = pg
+  QG_full[gen_idx] = qg
+
+  # Call Python function via PyCall
+  tsilib = ret_tsilib()
+  dTSI2 = tsilib.eval_tsi_h(Surrogate, PG_full, QG_full, PL, QL, muTSI, st_args)
+
+  # extract Hessian infomation just for active generators
+  hess = zeros(2 * num_active_gen, 2 * num_active_gen)
+  if size(dTSI2)[1] == total_num_gen
+    # Hessian wrt [pg]
+    hess[1:num_active_gen, 1:num_active_gen] = dTSI2[gen_idx, gen_idx]
+  elseif size(dTSI2)[1] == 2*total_num_gen
+    # Hessian wrt [pg qg]
+    gen_idx_full = vcat(gen_idx, gen_idx .+ num_active_gen)
+    hess = dTSI2[gen_idx_full, gen_idx_full]
+  else
+    # Hessian wrt [pg pl qg ql]
+    numb_gen_loads = total_num_gen + nl 
+    gen_idx_full = vcat(gen_idx, gen_idx .+ numb_gen_loads)
+    hess = dTSI2[gen_idx_full, gen_idx_full]
+  end
+
+  return Float64.(hess)
+end

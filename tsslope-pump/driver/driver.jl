@@ -62,7 +62,7 @@ D["CNN_Soft"] = [
                 CNN_Soft_all_2_model_path, 
                 CNN_Soft_AC_1_model_path, CNN_Soft_AC_2_model_path, CNN_Soft_AC_3_model_path, CNN_Soft_AC_4_model_path, CNN_Soft_AC_5_model_path,
                 # CNN_Soft_UQ_1_model_path, CNN_Soft_UQ_2_model_path, CNN_Soft_UQ_3_model_path, CNN_Soft_UQ_4_model_path, CNN_Soft_UQ_5_model_path
-                CNN_Soft_UQ_4_model_path
+                CNN_Soft_UQ_1_model_path, CNN_Soft_UQ_4_model_path
                 ] 
 D["CNN_Tanh"] = [
                 # CNN_Tanh_all_1_model_path, CNN_Tanh_all_2_model_path, CNN_Tanh_all_3_model_path, CNN_Tanh_all_4_model_path, CNN_Tanh_all_5_model_path,

@@ -9,14 +9,10 @@ from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
 import time
 
 def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
-    # if Surrogate['model_type'] == "CNN":
-    return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    # elif Surrogate['model_type'] == "CNN_Grad_UQ":
-    #     return d2TSI_dV2dP2_CNN_Grad_UQ(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    # elif Surrogate['model_type'] == "CNF":
-    #     return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    # elif Surrogate['model_type'] == "DSPP":
-    #     return d2TSI_dV2dP2_Gp(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    if Surrogate['model_type'] == "CNF":
+        return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    else:
+        return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """
@@ -29,7 +25,6 @@ def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     mean = scaler.mean_.view(-1).to(x.device, x.dtype)
     std = scaler.std_.view(-1).to(x.device, x.dtype)
     return (x - mean) / std
-
 
 # --- Constraint value: c(x) = (1 - alpha) - F_Y(u0 | x) ---
 def constraint_value(
@@ -86,9 +81,11 @@ def d2TSI_dV2dP2_CNF(CNFmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     device = CNFmodel['device'] 
     x_space = CNFmodel['x_space'] 
 
+    gen_idx = st_args['gen_idx']
+
     # Concatenate generators first, then loads (same as training)
-    P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
-    Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
+    P_concat = np.concatenate([Pg[gen_idx], Pl], axis=0)  # (Ngen+Nload,)
+    Q_concat = np.concatenate([Qg[gen_idx], Ql], axis=0)  # (Ngen+Nload,)
 
     # Per-sample layout: (2, Nunits)
     x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
@@ -105,6 +102,8 @@ def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
     model = CNNmodel["model"]
     dtype = CNNmodel['dtype'] 
+    active_gen_only = CNNmodel['active_gen_only']
+    gen_idx = st_args['gen_idx']
 
     def model_scalar(pg_vector):
         pl_t = torch.tensor(Pl, dtype=dtype)
@@ -116,7 +115,10 @@ def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
         y = model(X)
         return y.sum()    # must be scalar
 
-    pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
+    if active_gen_only:
+        pg = torch.tensor(Pg[gen_idx], dtype=dtype, requires_grad=True)
+    else:
+        pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
 
     H = hessian(model_scalar, pg)
 
@@ -129,6 +131,8 @@ def d2TSI_dV2dP2_CNN_Grad_UQ(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
     model = CNNmodel["model"]
     dtype = CNNmodel['dtype'] 
+    active_gen_only = CNNmodel['active_gen_only']
+    gen_idx = st_args['gen_idx']
     beta = st_args['beta'] 
 
     def f_scalar(pg_vector, beta):
@@ -151,8 +155,11 @@ def d2TSI_dV2dP2_CNN_Grad_UQ(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
         pred = y - beta * torch.dot(grad_pg, grad_pg)
         return pred
-
-    pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
+    
+    if active_gen_only:
+        pg = torch.tensor(Pg[gen_idx], dtype=dtype, requires_grad=True)
+    else:
+        pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
 
     H = torch.autograd.functional.hessian(
     lambda p: f_scalar(p, beta=beta),

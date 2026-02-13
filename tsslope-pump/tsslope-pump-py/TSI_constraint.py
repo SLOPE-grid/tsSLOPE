@@ -8,14 +8,10 @@ from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
 import time
 
 def TSI_constraint(Surrogate, Pg, Qg, st_args):
-    # if Surrogate['model_type'] == "CNN":
-    return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
-    # elif Surrogate['model_type'] == "CNN_Grad_UQ":
-    #     return TSI_constraint_CNN_Grad_UQ(Surrogate, Pg, Qg, st_args)
-    # elif Surrogate['model_type'] == "CNF":
-    #     return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
-    # elif Surrogate['model_type'] == "DSPP":
-    #     return TSI_constraint_GP(Surrogate, Pg, Qg, st_args)
+    if Surrogate['model_type'] == "CNF":
+        return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
+    else:
+        return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """
@@ -65,11 +61,13 @@ def TSI_constraint_CNF(Surrogate, Pg, Qg, st_args):
     device = Surrogate['device'] 
     x_space = Surrogate['x_space'] 
 
+    gen_idx = st_args['gen_idx']
+
     PL = st_args['PL']
     QL = st_args['QL']
 
-    Pg_input = Pg
-    Qg_input = Qg
+    Pg_input = Pg[gen_idx]
+    Qg_input = Qg[gen_idx]
     Pl_input = PL
     Ql_input = QL
 
@@ -89,14 +87,21 @@ def TSI_constraint_CNF(Surrogate, Pg, Qg, st_args):
 def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
     model = Surrogate['model']
     dtype = Surrogate['dtype'] 
+    active_gen_only = Surrogate['active_gen_only']
+    gen_idx = st_args['gen_idx']
 
     model.eval()
 
     PL = st_args['PL']
     QL = st_args['QL']
 
-    Pg_input = Pg.reshape(1, -1)
-    Qg_input = Qg.reshape(1, -1)
+    if active_gen_only:
+        Pg_input = Pg[gen_idx].reshape(1, -1)
+        Qg_input = Qg[gen_idx].reshape(1, -1)
+    else:
+        Pg_input = Pg.reshape(1, -1)
+        Qg_input = Qg.reshape(1, -1)
+
     Pl_input = PL.reshape(1, -1)
     Ql_input = QL.reshape(1, -1)
 
@@ -111,13 +116,19 @@ def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
 def TSI_constraint_CNN_Grad_UQ(Surrogate, Pg, Qg, st_args):
     model = Surrogate['model']
     dtype = Surrogate['dtype'] 
+    active_gen_only = Surrogate['active_gen_only']
+    gen_idx = st_args['gen_idx']
     beta = st_args['beta'] 
 
     PL = st_args['PL']
     QL = st_args['QL']
 
     # build full input vector as one differentiable tensor
-    pg = torch.tensor(Pg, dtype=dtype)
+    if active_gen_only:
+        pg = torch.tensor(Pg[gen_idx], dtype=dtype)
+    else:
+        pg = torch.tensor(Pg, dtype=dtype)
+        
     pl = torch.tensor(PL, dtype=dtype)
     ql = torch.tensor(QL, dtype=dtype)    
 

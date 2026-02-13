@@ -12,7 +12,7 @@ include(string(jl_lib,"/load_case.jl"))
 
 const CACHE = Dict{UInt64, Any}()
 
-function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau)
+function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Float64 = 1e-10)
 	print("done.\nCreating index lists for TSI constraint ...")
 	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
 		
@@ -20,7 +20,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 	opt = optimizer_with_attributes(Ipopt.Optimizer,
 		                            # "linear_solver" => "ma57",
 		                            "sb" => "yes",
-                                    "max_iter" =>  200,)
+                                    "max_iter" =>  max_iter,)
                   
     # get primal starting point
     x0 = get_primal_starting_point(psd)
@@ -28,13 +28,17 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
 
+    hess_analy =  Dict{Int, Dict{String,Any}}()
+
+    # Used to store spectral data
+    iter = 1
+
     if Surrogate["model_type"] != nothing
         N_gen = st_args["numb_active_gen"]
         function tsif(args...)
             pg_vec = collect(args[1:N_gen])
             qg_vec = collect(args[N_gen+1:2*N_gen])
     
-            # print("TSI constrint: ", TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec),"\n")
             return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
         end
     
@@ -56,6 +60,19 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
                 return
             else
                 hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, pg_vec, qg_vec)
+
+                if spect_info
+                    hess_analy_temp = h_analysis( hess;
+                                sparsity_tol = 1e-3,
+                                verbose  = false,
+                                save_Hess = save_Hess,
+                                ev_nonzero_tol = 1e-10,)
+
+                    hess_analy[iter] = hess_analy_temp
+                end
+
+                iter += 1
+
                 for i = 1:2*N_gen
                     for j = 1:i
                         h[i, j] = hess[i,j]
@@ -92,11 +109,21 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
         Surr_Feasibility_margin = TSIConstraint(psd, Surrogate, st_args, solution.p_g, solution.q_g) - tau
         grad = TSIConstraintPrime(psd, Surrogate, st_args, solution.p_g, solution.q_g)
         norm_grad = dot(grad, grad)
+        if spect_info
+            hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, solution.p_g, solution.q_g)
+            hess_analy_temp = h_analysis( hess;
+                                sparsity_tol = 1e-3,
+                                verbose  = false,
+                                save_Hess = save_Hess,
+                                ev_nonzero_tol = 1e-10,)
+
+            hess_analy[iter] = hess_analy_temp
+        end
     end
         
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
 		".\nWriting solution to "*solution_dir*" ... \n")
 
-    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad
+    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g, hess_analy
 
 end

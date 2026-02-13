@@ -7,12 +7,15 @@ from .d2TSI_dV2dP2      import d2TSI_dV2dP2
 from .dTSI_dVdP         import dTSI_dVdP
 from .TSI_constraint    import TSI_constraint
 
+
+from .spectral_analysis    import analyze_hessian
+
 #from .load_case         import load_case
 from .load_Surrogate    import load_surrogate
 
 
-def load_model(model_path, data_record, model_type):
-   return load_surrogate(model_path, data_record, model_type)
+def load_model(model_path, data_record, model_type, active_gen_only = True):
+   return load_surrogate(model_path, data_record, model_type, active_gen_only = active_gen_only)
 
 
 #def load_config(*_):
@@ -28,6 +31,10 @@ def eval_tsi_g(*_):
 def eval_tsi_h(*_):
 
     return d2TSI_dV2dP2(*_)
+
+def analy_h(*_):
+
+    return analyze_hessian(*_)
 
 def eval_tsi_f(*_):
     return TSI_constraint(*_)

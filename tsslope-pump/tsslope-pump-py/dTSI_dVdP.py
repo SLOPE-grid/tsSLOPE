@@ -9,14 +9,10 @@ import time
 
 def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, st_args):
 
-    # if Surrogate['model_type'] == "CNN":
-    return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
-    # elif Surrogate['model_type'] == "CNN_Grad_UQ":
-    #     return dTSI_dVdP_CNN_Grad_UQ(Surrogate, Pg, Qg, Pl, Ql, st_args)
-    # elif Surrogate['model_type'] == "CNF":
-    #     return dTSI_dVdP_CNF(Surrogate, Pg, Qg, Pl, Ql, st_args)
-    # elif Surrogate['model_type'] == "DSPP":
-    #     return dTSI_dVdP_GP(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    if Surrogate['model_type'] == "CNF":
+        return dTSI_dVdP_CNF(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    else:
+        return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """
@@ -85,9 +81,11 @@ def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
     device = CNFmodel['device'] 
     x_space = CNFmodel['x_space'] 
 
+    gen_idx = st_args['gen_idx']
+
     # Concatenate generators first, then loads (same as training)
-    P_concat = np.concatenate([Pg, Pl], axis=0)  # (Ngen+Nload,)
-    Q_concat = np.concatenate([Qg, Ql], axis=0)  # (Ngen+Nload,)
+    P_concat = np.concatenate([Pg[gen_idx], Pl], axis=0)  # (Ngen+Nload,)
+    Q_concat = np.concatenate([Qg[gen_idx], Ql], axis=0)  # (Ngen+Nload,)
 
     # Per-sample layout: (2, Nunits)
     x_test_np = np.stack([P_concat, Q_concat], axis=0)  # (2, Nunits)
@@ -98,14 +96,21 @@ def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
     
     return g.detach().cpu().numpy()
 
+
 # derivative of f(s) > tau
 def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, st_args):
 
     model = CNNmodel["model"]
     dtype = CNNmodel['dtype'] 
+    active_gen_only = CNNmodel['active_gen_only']
+    gen_idx = st_args['gen_idx']
 
     # build full input vector as one differentiable tensor
-    pg = torch.tensor(Pg, dtype=dtype)
+    if active_gen_only:
+        pg = torch.tensor(Pg[gen_idx], dtype=dtype)
+    else:
+        pg = torch.tensor(Pg, dtype=dtype)
+
     pl = torch.tensor(Pl, dtype=dtype)
     ql = torch.tensor(Ql, dtype=dtype)    
 
@@ -127,6 +132,8 @@ def dTSI_dVdP_CNN_Grad_UQ(CNNmodel, Pg, Qg, Pl, Ql, st_args):
 
     model = CNNmodel["model"]
     dtype = CNNmodel['dtype'] 
+    active_gen_only = CNNmodel['active_gen_only']
+    gen_idx = st_args['gen_idx']
     beta = st_args['beta'] 
 
     def f_scalar(pg_vector, beta):
@@ -150,7 +157,11 @@ def dTSI_dVdP_CNN_Grad_UQ(CNNmodel, Pg, Qg, Pl, Ql, st_args):
         pred = y - beta * torch.dot(grad_pg, grad_pg)
         return pred
 
-    pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
+    
+    if active_gen_only:
+        pg = torch.tensor(Pg[gen_idx], dtype=dtype, requires_grad=True)
+    else:
+        pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
 
     (grad_pg,) = torch.autograd.grad(
         f_scalar(pg, beta=beta),

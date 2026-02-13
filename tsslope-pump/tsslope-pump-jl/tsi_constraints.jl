@@ -51,12 +51,19 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
   grad = zeros(2 * num_active_gen)
 
   # check if the gradient is with respect to just pg or both pg qg
-  if length(dTSI) == total_num_gen
+  if length(dTSI) == total_num_gen 
     # gradient wrt [pg]
     grad[1:num_active_gen] = dTSI[gen_idx]
+  elseif length(dTSI) == num_active_gen 
+    # gradient wrt [pg]
+    grad[1:num_active_gen] = dTSI
   elseif length(dTSI) == 2*total_num_gen
     # gradient wrt [pg qg]
     grad[1:num_active_gen] = dTSI[gen_idx]
+    grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+num_active_gen]
+  elseif length(dTSI) == 2*num_active_gen
+    # gradient wrt [pg qg]
+    grad[1:num_active_gen] = dTSI
     grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+num_active_gen]
   else
     # gradient wrt [pg pl qg ql]
@@ -97,9 +104,16 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   if size(dTSI2)[1] == total_num_gen
     # Hessian wrt [pg]
     hess[1:num_active_gen, 1:num_active_gen] = dTSI2[gen_idx, gen_idx]
+  elseif size(dTSI2)[1] == num_active_gen
+    # Hessian wrt [pg]
+    hess[1:num_active_gen, 1:num_active_gen] = dTSI2
   elseif size(dTSI2)[1] == 2*total_num_gen
     # Hessian wrt [pg qg]
     gen_idx_full = vcat(gen_idx, gen_idx .+ num_active_gen)
+    hess = dTSI2[gen_idx_full, gen_idx_full]
+  elseif size(dTSI2)[1] == 2*num_active_gen
+    # Hessian wrt [pg qg]
+    gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
     hess = dTSI2[gen_idx_full, gen_idx_full]
   else
     # Hessian wrt [pg pl qg ql]
@@ -109,4 +123,43 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   end
 
   return Float64.(hess)
+end
+
+
+function h_analysis(
+  H::AbstractMatrix{<:Real};
+  sparsity_tol::Float64 = 1e-3,
+  verbose::Bool = true,
+  save_Hess::Bool = false,
+  ev_nonzero_tol::Float64 = 1e-10,
+)
+
+  tsilib = ret_tsilib()
+
+  # Call Python with keyword arguments
+  pyres = tsilib.analyze_hessian(
+      H;
+      sparsity_tol = sparsity_tol,
+      verbose = verbose,
+      save_Hess = save_Hess,
+      ev_nonzero_tol = 1e-10
+  )
+
+  # ---- Convert to Julia-native structures ----
+  results = Dict{String,Any}()
+
+  if save_Hess
+    results["H"]        = Matrix{Float64}(pyres["H"])
+  end
+
+  results["eigenvalues"] = Vector{Float64}(pyres["eigenvalues"])
+  results["hessian_density"] = Float64(pyres["hessian_density"])
+
+  results["nonzero_ev_indx"] =
+      Vector{Int}(pyres["nonzero_ev_indx"]) 
+  
+  results["nonzero_evecs"] =
+      Matrix{Float64}(pyres["nonzero_evecs"])
+
+  return results
 end

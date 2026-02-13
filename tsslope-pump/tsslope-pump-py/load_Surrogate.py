@@ -464,25 +464,25 @@ class CNN1D_Softplus(nn.Module):
    
 
 
-def load_surrogate(Model_Path, data_record, model_type):
+def load_surrogate(Model_Path, data_record, model_type, active_gen_only = True):
     if model_type == "CNN":
-        return load_CNNmodel(Model_Path, data_record, model_type)
+        return load_CNNmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_SiLU":
-        return load_CNNmodel_SiLU(Model_Path, data_record, model_type)
+        return load_CNNmodel_SiLU(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_GELU":
-        return load_CNNmodel_GELU(Model_Path, data_record, model_type)
+        return load_CNNmodel_GELU(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_Sig":
-        return load_CNNmodel_Sig(Model_Path, data_record, model_type)
+        return load_CNNmodel_Sig(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_Tanh":
-        return load_CNNmodel_Tanh(Model_Path, data_record, model_type)
+        return load_CNNmodel_Tanh(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_Soft":
-        return load_CNNmodel_Soft(Model_Path, data_record, model_type)
+        return load_CNNmodel_Soft(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_Grad_UQ":
-        return load_CNNmodel(Model_Path, data_record, model_type)
+        return load_CNNmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNF":
-        return load_CNFmodel(Model_Path, data_record, model_type)
+        return load_CNFmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "DSPP":
-        return load_GPmodel(Model_Path, data_record, model_type)
+        return load_GPmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     else:
         raise ValueError("Incorrect model_type")
 
@@ -493,6 +493,7 @@ def load_CNFmodel(
     model_type,
     device: torch.device = torch.device("cpu"),
     override_dtype: Optional[str] = "float64",
+    active_gen_only = True
 ):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
@@ -506,7 +507,7 @@ def load_CNFmodel(
     Load a trained ConditionalCDF model and its StandardScalerTorch from a checkpoint.
     """
     ckpt = torch.load(ckpt_path, map_location=device)
-
+    
     # infer dtype from checkpoint unless overridden
     def _first_tensor_dtype(d):
         if isinstance(d, dict):
@@ -534,6 +535,7 @@ def load_CNFmodel(
 
     model = ConditionalCDF(x_dim=x_dim, hidden=hidden, n_quad=n_quad, device=device).to(dtype)
     model.load_state_dict(ckpt["state_dict"])
+
     model = model.to(dtype).to(device).eval()
 
     scaler = StandardScalerTorch()
@@ -555,11 +557,12 @@ def load_CNFmodel(
     Surrogate['device'] = device
     Surrogate['x_space'] = x_space
     Surrogate['model_type'] = model_type
+    Surrogate['active_gen_only'] = active_gen_only
 
     return Surrogate, data, TSI
 
 def load_CNNmodel(Model_Path, data_record, model_type,
-    override_dtype: Optional[str] = "float64",):
+    override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
     data = data['Data']
@@ -583,12 +586,13 @@ def load_CNNmodel(Model_Path, data_record, model_type,
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
     Surrogate['model_type'] = model_type
+    Surrogate['active_gen_only'] = active_gen_only
 
     return Surrogate, data, TSI
 
 
 def load_CNNmodel_SiLU(Model_Path, data_record, model_type,
-    override_dtype: Optional[str] = "float64",):
+    override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
     data = data['Data']
@@ -613,11 +617,12 @@ def load_CNNmodel_SiLU(Model_Path, data_record, model_type,
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
     Surrogate['model_type'] = model_type
+    Surrogate['active_gen_only'] = active_gen_only
 
     return Surrogate, data, TSI
 
 def load_CNNmodel_GELU(Model_Path, data_record, model_type,
-    override_dtype: Optional[str] = "float64",):
+    override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
     data = data['Data']
@@ -641,11 +646,12 @@ def load_CNNmodel_GELU(Model_Path, data_record, model_type,
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
     Surrogate['model_type'] = model_type
+    Surrogate['active_gen_only'] = active_gen_only
 
     return Surrogate, data, TSI
 
 def load_CNNmodel_Sig(Model_Path, data_record, model_type,
-    override_dtype: Optional[str] = "float64",):
+    override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
     data = data['Data']
@@ -669,11 +675,12 @@ def load_CNNmodel_Sig(Model_Path, data_record, model_type,
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
     Surrogate['model_type'] = model_type
+    Surrogate['active_gen_only'] = active_gen_only
 
     return Surrogate, data, TSI
 
 def load_CNNmodel_Tanh(Model_Path, data_record, model_type,
-    override_dtype: Optional[str] = "float64",):
+    override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
     data = data['Data']
@@ -697,11 +704,12 @@ def load_CNNmodel_Tanh(Model_Path, data_record, model_type,
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
     Surrogate['model_type'] = model_type
+    Surrogate['active_gen_only'] = active_gen_only
 
     return Surrogate, data, TSI
 
 def load_CNNmodel_Soft(Model_Path, data_record, model_type,
-    override_dtype: Optional[str] = "float64",):
+    override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
     data = scio.loadmat(data_record)
     data = data['Data']
@@ -725,10 +733,11 @@ def load_CNNmodel_Soft(Model_Path, data_record, model_type,
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
     Surrogate['model_type'] = model_type
+    Surrogate['active_gen_only'] = active_gen_only
 
     return Surrogate, data, TSI
 
-def load_GPmodel(Model_Path, data_record, model_type):
+def load_GPmodel(Model_Path, data_record, model_type,  active_gen_only = True):
     batch_size = 500  # Size of minibatch
     milestones = [20, 150, 300]  # Epochs at which we will lower the learning rate by a factor of 0.1
     num_inducing_pts = 300  # Number of inducing points in each hidden layer 97.8, 8.0
@@ -799,6 +808,7 @@ def load_GPmodel(Model_Path, data_record, model_type):
     GPmodel['y_mean'] = y_mean
     GPmodel['y_std'] = y_std
     GPmodel['model_type'] = model_type
+    GPmodel['active_gen_only'] = active_gen_only
 
     data = data.numpy()
     TSI = TSI.numpy()

@@ -1,11 +1,11 @@
 
-include("load_config.jl")
+include("load_config_serial.jl")
 
 using Pkg;
 Pkg.activate((path_to_exajugo))
 push!(LOAD_PATH, string(path_to_exajugo, "/modules"))
 
-include("exajugo_call.jl") 
+include("exajugo_call_serial.jl") 
 
 using PyCall
 pushfirst!(pyimport("sys")."path", path_to_tsslope)
@@ -15,21 +15,19 @@ jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/tsi_constraints.jl"))
 
 # need a better way of doing this
-model_type = "CNN"
+model_type = nothing  # try UQ_CNN
 
-if model_type == "CNN"
+if model_type == "UQ_CNN"
+    surrogate, data, TSI = tsslope_lib.load_model(UQ_CNN_model_path, LLNL_data_record, model_type)
+elseif model_type == "CNN"
     surrogate, data, TSI = tsslope_lib.load_model(CNN_model_path, LLNL_data_record, model_type)
-elseif model_type == "CNN_Grad_UQ"
-    surrogate, data, TSI = tsslope_lib.load_model(CNN_model_path, LLNL_data_record, model_type)
-elseif model_type == "CNF"
+elseif model_type == "CNF" # CNF: Emil's model
     surrogate, data, TSI = tsslope_lib.load_model(CNF_model_path, LLNL_data_record, model_type)
 elseif model_type == "DSPP"
     surrogate, data, TSI = tsslope_lib.load_model(model_path, LLNL_data_record, model_type)
-else
-    surrogate = Dict(
-        "model_type" => nothing,
-    )
-    println("ACOPF will run without a surrogate.")
+elseif model_type == nothing
+    surrogate = Dict()
+    surrogate["model_type"] = "None"
 end
 
 TSACOPF(case_path, case_sol_path, pf_limit_file, surrogate);

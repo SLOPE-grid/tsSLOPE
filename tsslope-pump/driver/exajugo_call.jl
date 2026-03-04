@@ -12,7 +12,7 @@ include(string(jl_lib,"/load_case.jl"))
 
 const CACHE = Dict{UInt64, Any}()
 
-function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Float64 = 1e-10)
+function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Float64 = 1e-10, Hess_approx::Bool = false)
 	print("done.\nCreating index lists for TSI constraint ...")
 	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
 		
@@ -33,8 +33,28 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     # Used to store spectral data
     iter = 1
 
+    # limited memory parameter
+    LMp = 2
+
+    approx_type = "sparse"
+    # approx_type = "block"
+    # approx_type = "iter"
+
     if Surrogate["model_type"] != nothing
         N_gen = st_args["numb_active_gen"]
+
+        # For SR1 Hessian approximation
+        if Hess_approx
+            gamma = 100.
+            B0 = gamma * Matrix{Float64}(I, 2*N_gen, 2*N_gen)
+            x = Vector{Vector{Float64}}()
+            g = Vector{Vector{Float64}}()
+            S = Vector{Vector{Float64}}()
+            Y = Vector{Vector{Float64}}()
+            B = Vector{Matrix{Float64}}()
+            push!(B, B0)
+        end
+
         function tsif(args...)
             pg_vec = collect(args[1:N_gen])
             qg_vec = collect(args[N_gen+1:2*N_gen])
@@ -59,14 +79,52 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
                 h =  CACHE[hsh]
                 return
             else
-                hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, pg_vec, qg_vec)
+                if Hess_approx
+                    grad = TSIConstraintPrime(psd, Surrogate, st_args, pg_vec, qg_vec)
+                    x_temp = zeros(2*N_gen)
+                    if iter == 1
+                        x_temp[1:N_gen] .= pg_vec 
+                        push!(x, x_temp)
+                        push!(g, grad)
+                        hess = B0
+                    else
+                        x_temp[1:N_gen] .= pg_vec 
+                        push!(x, x_temp)
+                        push!(g, grad)
+                        push!(S, x[2] - x[1])
+                        push!(Y, g[2] - g[1])
+                        popfirst!(x)
+                        popfirst!(g)
 
+                        if approx_type == "iter"
+                            hess = TSIConstraintHessApprox(st_args, B[1], S[end], Y[end], approx_type)
+                        else
+                            hess = TSIConstraintHessApprox(st_args, B0, S, Y, approx_type)
+                        end
+
+                        if length(S) > LMp
+                            popfirst!(S)
+                            popfirst!(Y)
+                        end
+
+                        push!(B, hess)
+                        popfirst!(B)
+                    end
+
+                else
+                    hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, pg_vec, qg_vec)
+                end
                 if spect_info
                     hess_analy_temp = h_analysis( hess;
                                 sparsity_tol = 1e-3,
                                 verbose  = false,
                                 save_Hess = save_Hess,
                                 ev_nonzero_tol = 1e-10,)
+
+                    hess_analy_temp["grad"] = grad
+                    hess_analy_temp["pg"]   = pg_vec
+                    hess_analy_temp["pl"]   = st_args["PL"]
+                    hess_analy_temp["ql"]   = st_args["QL"]
 
                     hess_analy[iter] = hess_analy_temp
                 end
@@ -116,6 +174,11 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
                                 verbose  = false,
                                 save_Hess = save_Hess,
                                 ev_nonzero_tol = 1e-10,)
+
+            hess_analy_temp["grad"] = grad
+            hess_analy_temp["pg"]   = solution.p_g
+            hess_analy_temp["pl"]   = st_args["PL"]
+            hess_analy_temp["ql"]   = st_args["QL"]
 
             hess_analy[iter] = hess_analy_temp
         end

@@ -32,6 +32,7 @@ def analyze_hessian(
     # ============================================================
     # Sparsity / second-order sensitivity structure
     # ============================================================
+    absH = np.abs(H)
     threshold = sparsity_tol * np.max(absH)
     large_mask = absH > threshold
 
@@ -40,6 +41,7 @@ def analyze_hessian(
     # ============================================================
     # Collect results
     # ============================================================
+
     if save_Hess:
         results = {
             "H": H,

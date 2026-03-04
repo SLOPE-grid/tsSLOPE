@@ -125,6 +125,25 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   return Float64.(hess)
 end
 
+# function TSIConstraintHessApprox(B, S, Y; k = nothing)
+function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="block")
+
+
+  num_active_gen = st_args["numb_active_gen"]
+
+  # Call Python function via PyCall
+  tsilib = ret_tsilib()
+
+  # dTSI2 = tsilib.eval_tsi_h_approx(B, S, Y)
+
+  dTSI2 = tsilib.eval_tsi_h_approx(B, S, Y, approx_type)
+
+  gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
+  hess = dTSI2[gen_idx_full, gen_idx_full]
+
+
+  return Float64.(hess)
+end
 
 function h_analysis(
   H::AbstractMatrix{<:Real};

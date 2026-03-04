@@ -6,6 +6,7 @@ import torch
 from .d2TSI_dV2dP2      import d2TSI_dV2dP2
 from .dTSI_dVdP         import dTSI_dVdP
 from .TSI_constraint    import TSI_constraint
+from .SR1_approx        import hess_approx
 
 
 from .spectral_analysis    import analyze_hessian
@@ -31,6 +32,10 @@ def eval_tsi_g(*_):
 def eval_tsi_h(*_):
 
     return d2TSI_dV2dP2(*_)
+
+def eval_tsi_h_approx(*_):
+
+    return hess_approx(*_)
 
 def analy_h(*_):
 

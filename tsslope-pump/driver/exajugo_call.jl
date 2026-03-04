@@ -36,9 +36,9 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     # limited memory parameter
     LMp = 2
 
-    approx_type = "sparse"
-    # approx_type = "block"
-    # approx_type = "iter"
+    approx_type = "Sparse"
+    # approx_type = "Limited"
+    # approx_type = "Full"
 
     if Surrogate["model_type"] != nothing
         N_gen = st_args["numb_active_gen"]
@@ -96,7 +96,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
                         popfirst!(x)
                         popfirst!(g)
 
-                        if approx_type == "iter"
+                        if approx_type == "Full"
                             hess = TSIConstraintHessApprox(st_args, B[1], S[end], Y[end], approx_type)
                         else
                             hess = TSIConstraintHessApprox(st_args, B0, S, Y, approx_type)

@@ -30,10 +30,10 @@ save_Hess = false
 
 active_gen_only = true
 
-# model_type = "CNF"
-model_type = "CNN_Soft"
+model_type = "CNF"
+# model_type = "CNN_Soft"
 
-max_iter = 200
+max_iter = 300
 
 tau = 0.0
 
@@ -41,8 +41,8 @@ t0 = time()
 
 Hess_approx = true
 
-# surrogate, data, TSI = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
-surrogate, data, TSI = tsslope_lib.load_model(CNN_Soft_UQ_1_model_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+surrogate, data, TSI = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+# surrogate, data, TSI = tsslope_lib.load_model(CNN_Soft_UQ_1_model_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
 
 num_iter, total_time, base_cost,
 Surr_Feasibility_margin, termination_status, norm_grad, pg, hess_analy =

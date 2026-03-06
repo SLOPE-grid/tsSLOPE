@@ -42,7 +42,7 @@ def SR1_approx_Limited(B0, y, s):
 def SR1_spar_Sparse(B0, y, s):
     """
     Sparse block SR1 Hessian approximation.
-    Mel is currently set to sqrt(n) but will later be
+    Mel is currently set to sqrt(10 n) but will later be
     exposed as a tunable sparsity parameter.
     """
 
@@ -64,7 +64,7 @@ def SR1_spar_Sparse(B0, y, s):
     w, UT = np.linalg.eigh(T)
     U = Q @ UT
 
-    # Sparsity level (placeholder: sqrt(n))
+    # Sparsity level (placeholder: sqrt(10 n))
     Mel = int(np.floor(np.sqrt(10 * U.shape[0])))
 
     # Select rows with largest 2-norm

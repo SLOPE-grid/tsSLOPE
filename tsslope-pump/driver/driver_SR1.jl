@@ -32,6 +32,7 @@ active_gen_only = true
 
 model_type = "CNF"
 # model_type = "CNN_Soft"
+# model_type = "None"
 
 max_iter = 300
 
@@ -41,8 +42,20 @@ t0 = time()
 
 Hess_approx = true
 
-surrogate, data, TSI = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
-# surrogate, data, TSI = tsslope_lib.load_model(CNN_Soft_UQ_1_model_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+gamma = -100.
+r = 6
+# approx_type = "Sparse"
+# approx_type = "Limited"
+approx_type = "Full"
+
+if model_type == "None"
+    surrogate = Dict(
+        "model_type" => nothing,
+        )
+else
+    # surrogate, data, TSI = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+    surrogate, data, TSI = tsslope_lib.load_model(CNN_Soft_UQ_1_model_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+end
 
 num_iter, total_time, base_cost,
 Surr_Feasibility_margin, termination_status, norm_grad, pg, hess_analy =
@@ -56,7 +69,10 @@ Surr_Feasibility_margin, termination_status, norm_grad, pg, hess_analy =
         spect_info = save_spect_info,
         save_Hess = save_Hess,
         max_iter = max_iter,
-        Hess_approx = Hess_approx
+        Hess_approx = Hess_approx,
+        gamma = gamma,
+        approx_type = approx_type,
+        r = r
     )
 
 

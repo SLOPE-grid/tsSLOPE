@@ -12,7 +12,7 @@ include(string(jl_lib,"/load_case.jl"))
 
 const CACHE = Dict{UInt64, Any}()
 
-function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Float64 = 1e-10, Hess_approx::Bool = false)
+function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Float64 = 1e-10, Hess_approx::Bool = false, gamma::Float64 = 0., approx_type::String = "Sparse", r::Int = 6)
 	print("done.\nCreating index lists for TSI constraint ...")
 	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
 		
@@ -20,7 +20,9 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 	opt = optimizer_with_attributes(Ipopt.Optimizer,
 		                            # "linear_solver" => "ma57",
 		                            "sb" => "yes",
-                                    "max_iter" =>  max_iter,)
+                                    "max_iter" =>  max_iter,
+                                    "print_timing_statistics" => "yes",
+                                    )
                   
     # get primal starting point
     x0 = get_primal_starting_point(psd)
@@ -34,18 +36,13 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     iter = 1
 
     # limited memory parameter
-    LMp = 2
-
-    approx_type = "Sparse"
-    # approx_type = "Limited"
-    # approx_type = "Full"
+    LMp = r   
 
     if Surrogate["model_type"] != nothing
         N_gen = st_args["numb_active_gen"]
 
         # For SR1 Hessian approximation
         if Hess_approx
-            gamma = 100.
             B0 = gamma * Matrix{Float64}(I, 2*N_gen, 2*N_gen)
             x = Vector{Vector{Float64}}()
             g = Vector{Vector{Float64}}()
@@ -84,11 +81,17 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
                     x_temp = zeros(2*N_gen)
                     if iter == 1
                         x_temp[1:N_gen] .= pg_vec 
+                        if Surrogate["model_type"] == "CNF"
+                            x_temp[N_gen+1:2*N_gen] .= qg_vec 
+                        end
                         push!(x, x_temp)
                         push!(g, grad)
                         hess = B0
                     else
                         x_temp[1:N_gen] .= pg_vec 
+                        if Surrogate["model_type"] == "CNF"
+                            x_temp[N_gen+1:2*N_gen] .= qg_vec 
+                        end
                         push!(x, x_temp)
                         push!(g, grad)
                         push!(S, x[2] - x[1])
@@ -142,11 +145,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 
         register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
-        if Surrogate["model_type"] == "CNF"
-            @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.0 )
-        else
-            @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= tau )
-        end
+        @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= tau )
         
         if !ispath(solution_dir)
             mkpath(solution_dir)

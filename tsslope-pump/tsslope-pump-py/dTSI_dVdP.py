@@ -96,7 +96,6 @@ def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
     
     return g.detach().cpu().numpy()
 
-
 # derivative of f(s) > tau
 def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, st_args):
 

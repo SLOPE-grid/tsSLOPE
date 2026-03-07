@@ -465,6 +465,7 @@ class CNN1D_Softplus(nn.Module):
 
 
 def load_surrogate(Model_Path, data_record, model_type, active_gen_only = True):
+    
     if model_type == "CNN":
         return load_CNNmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_SiLU":
@@ -484,7 +485,18 @@ def load_surrogate(Model_Path, data_record, model_type, active_gen_only = True):
     elif model_type == "DSPP":
         return load_GPmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     else:
-        raise ValueError("Incorrect model_type")
+        print("Incorrect model_type. Code will run without a surrogate")
+
+        data = scio.loadmat(data_record)
+        data = data['Data']
+        TSI = data[:, -1].reshape(-1, 1)
+        TSI = (TSI >= 0).astype(int)
+
+        data = data[:, :-1]
+
+        Surrogate = {"model_type": None}
+
+        return Surrogate, data, TSI
 
      
 def load_CNFmodel(
@@ -589,7 +601,6 @@ def load_CNNmodel(Model_Path, data_record, model_type,
     Surrogate['active_gen_only'] = active_gen_only
 
     return Surrogate, data, TSI
-
 
 def load_CNNmodel_SiLU(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64", active_gen_only = True):

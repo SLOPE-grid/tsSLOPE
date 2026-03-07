@@ -47,7 +47,10 @@ def constraint_value(
     # Map to standardized features for the model
     x_std = x_to_std(x_param, scaler, x_space).view(1, -1)
     y0 = torch.tensor([u0], device=device, dtype=dtype)
+    t0 = time.time()
     F_u0 = model.cdf(y0, x_std).view(())       # scalar
+    total_time = time.time() - t0
+    # print(f"Total time to calculate model.cdf: {total_time}")
     c = (1.0 - alpha) - F_u0
     return c
 

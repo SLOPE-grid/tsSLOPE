@@ -34,8 +34,11 @@ def SR1_approx_Limited(B0, y, s):
         B = np.outer((y[0] - B0@s[0]), (y[0] - B0@s[0]) )/ ( np.inner(y[0], s[0]) - np.inner(B0 @ s[0], s[0]) ) 
     else:
         L, D, S, Y = make_L_D_S_Y(s, y)
-        Inv = np.linalg.inv(D + L + L.T - S.T @ B0 @ S)
-        B = B0 + (Y - B0@S) @ Inv @ (Y - B0@S).T
+        # Compact SR1 form:  B = B0 + N M^{-1} N^T
+        N = Y - B0 @ S
+        M = D + L + L.T - S.T @ B0 @ S
+        Z = np.linalg.solve(M, N.T)
+        B = B0 + N @ Z
 
     return B
 
@@ -45,6 +48,7 @@ def SR1_spar_Sparse(B0, y, s):
     Mel is currently set to sqrt(10 n) but will later be
     exposed as a tunable sparsity parameter.
     """
+    n = 10
 
     # Build compact SR1 quantities
     L, D, S, Y = make_L_D_S_Y(s, y)
@@ -64,8 +68,8 @@ def SR1_spar_Sparse(B0, y, s):
     w, UT = np.linalg.eigh(T)
     U = Q @ UT
 
-    # Sparsity level (placeholder: sqrt(10 n))
-    Mel = int(np.floor(np.sqrt(10 * U.shape[0])))
+    # Sparsity level 
+    Mel = int(np.floor(np.sqrt(n * U.shape[0])))
 
     # Select rows with largest 2-norm
     row_norms_sq = np.sum(U**2, axis=1)

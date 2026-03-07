@@ -36,7 +36,11 @@ model_type = "CNF"
 
 max_iter = 300
 
-tau = 0.0
+if model_type == "CNF"
+    tau = 0.0
+else
+    tau = 0.5
+end
 
 t0 = time()
 
@@ -44,18 +48,20 @@ Hess_approx = true
 
 gamma = -100.
 r = 6
-# approx_type = "Sparse"
-# approx_type = "Limited"
-approx_type = "Full"
 
-if model_type == "None"
-    surrogate = Dict(
-        "model_type" => nothing,
-        )
-else
-    # surrogate, data, TSI = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+approx_type = "Sparse"
+# approx_type = "Limited"
+# approx_type = "Full"
+
+if model_type == "CNF"
+    surrogate, data, TSI = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+elseif model_type == "CNN_Soft"
     surrogate, data, TSI = tsslope_lib.load_model(CNN_Soft_UQ_1_model_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+else
+    surrogate, data, TSI = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
 end
+
+println(surrogate["model_type"])
 
 num_iter, total_time, base_cost,
 Surr_Feasibility_margin, termination_status, norm_grad, pg, hess_analy =

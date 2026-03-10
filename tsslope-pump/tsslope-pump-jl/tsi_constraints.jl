@@ -27,7 +27,7 @@ end
 
 ### define first derivative for the TSI constraint
 
-function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
+function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg, approx_type = "None")
 
   # Load information
   PL = st_args["PL"]
@@ -77,7 +77,12 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
     grad[1+num_active_gen:2*num_active_gen] = dTSI[(1:num_active_gen).+ numb_gen_loads]
   end
 
-  return Float64.(grad)
+  if approx_type == "Sparse"
+    idx = findall(!iszero, grad)
+    return Int.(idx), Float64.(grad[idx]), Float64.(grad)
+  else
+    return Float64.(grad)
+  end
 end
 
 ### define second derivative for the TSI constraint
@@ -135,24 +140,26 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   return Float64.(hess)
 end
 
-# function TSIConstraintHessApprox(B, S, Y; k = nothing)
-function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="block")
-
-
-  num_active_gen = st_args["numb_active_gen"]
+function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse")
 
   # Call Python function via PyCall
   tsilib = ret_tsilib()
 
-  # dTSI2 = tsilib.eval_tsi_h_approx(B, S, Y)
+  if approx_type == "Sparse"
+    I, J, V = tsilib.eval_tsi_h_approx(B, S, Y, approx_type)
 
-  dTSI2 = tsilib.eval_tsi_h_approx(B, S, Y, approx_type)
+    return Int.(I), Int.(J), Float64.(V)
+  else
 
-  gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
-  hess = dTSI2[gen_idx_full, gen_idx_full]
+    num_active_gen = st_args["numb_active_gen"]
 
+    dTSI2 = tsilib.eval_tsi_h_approx(B, S, Y, approx_type)
 
-  return Float64.(hess)
+    gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
+    hess = dTSI2[gen_idx_full, gen_idx_full]
+  
+    return Float64.(hess)
+  end
 end
 
 function h_analysis(

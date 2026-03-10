@@ -86,7 +86,10 @@ def SR1_spar_Sparse(B0, y, s):
     # Sparse low-rank SR1 update
     B_til = B0 + Q_til @ np.diag(w) @ Q_til.T
 
-    return B_til
+    rows, cols = np.nonzero(B_til)
+    vals = B_til[rows, cols]
+
+    return rows + 1, cols + 1, vals
 
 def hess_approx(B, S, Y, approx_type="Sparse"):
 

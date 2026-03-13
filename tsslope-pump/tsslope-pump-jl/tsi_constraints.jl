@@ -146,13 +146,22 @@ function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse")
   tsilib = ret_tsilib()
 
   if approx_type == "Sparse"
-    I, J, V = tsilib.eval_tsi_h_approx(B, S, Y, approx_type, st_args["top_idx"])
 
-    return Int.(I), Int.(J), Float64.(V)
+    # println("In Sparse")
+    num_active_gen = st_args["numb_active_gen"]
+    dTSI2 = tsilib.eval_tsi_h_approx(B, S, Y, approx_type, st_args["top_idx"])
+
+    gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
+    hess = dTSI2[gen_idx_full, gen_idx_full]
+
+    # println("Created Approximation")
+
+    return Float64.(hess)
   elseif approx_type == "Sparse_pattern"
+    # println("In Sparse Pattern")
     I, J, top = tsilib.eval_tsi_h_approx(B, S, Y, approx_type)
 
-    return Int.(I), Int.(J), Int.(J)
+    return Int.(I), Int.(J), Int.(top)
   else
 
     num_active_gen = st_args["numb_active_gen"]

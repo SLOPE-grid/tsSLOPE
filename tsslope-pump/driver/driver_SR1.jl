@@ -46,7 +46,7 @@ t0 = time()
 
 Hess_approx = true
 
-gamma = -100.
+gamma = 100.
 r = 6
 
 approx_type = "Sparse"

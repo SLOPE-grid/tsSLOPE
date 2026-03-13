@@ -104,10 +104,12 @@ def SR1_spar_Sparse(B0, y, s, top_idx):
     # n = 10
 
     # Build compact SR1 quantities
-    print(f"len(s): {len(s)}")
-    print(f"Number of entries in s: {len(s[0])}")
-    print(f"len(y): {len(y)}")
-    print(f"Number of entries in y: {len(y[0])}")
+    # print(f"len(s): {len(s)}")
+    # print(f"Number of entries in s: {len(s[0])}")
+    # print(f"len(y): {len(y)}")
+    # print(f"Number of entries in y: {len(y[0])}")
+    # print(f"len(top_idx): {len(top_idx)}")
+    # print(f"top_idx: {top_idx}")
 
 
     L, D, S, Y = make_L_D_S_Y(s, y)

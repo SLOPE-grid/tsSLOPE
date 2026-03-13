@@ -6,6 +6,7 @@ const MOI = JuMP.MOI
 using MAT
 using LinearAlgebra
 using SparseArrays
+using Distributions
 
 jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/load_case.jl"))
@@ -533,17 +534,14 @@ end
 #   vals        :: Vector{Float64}
 #   top         :: Any
 # ---------------------------------------------------------
-function TSI_g_bb_hess_sparse(
-    x::Vector{Float64},
-    p_idx::Vector{Int},
-    q_idx::Vector{Int},
+function TSI_g_bb_hess_values(
     st_args,
     B0,
     S,
     Y,
     approx_type::String,
 )
-    rows_local, cols_local, vals, top = TSIConstraintHessApprox(
+    B = TSIConstraintHessApprox(
         st_args,
         B0,
         S,
@@ -551,18 +549,14 @@ function TSI_g_bb_hess_sparse(
         approx_type,
     )
 
-    idx_map = vcat(p_idx, q_idx)
-    rows_global = idx_map[rows_local]
-    cols_global = idx_map[cols_local]
-
-    return rows_global, cols_global, vals, top
+    return B
 end
 
 # ---------------------------------------------------------
 # Evaluator for one black-box nonlinear constraint:
 #       TSI(pg, qg) >= tau
 # ---------------------------------------------------------
-mutable struct TSIEvaluator <: MOI.AbstractNLPEvaluator
+struct TSIEvaluator <: MOI.AbstractNLPEvaluator
     n::Int
     N_gen::Int
 
@@ -570,8 +564,12 @@ mutable struct TSIEvaluator <: MOI.AbstractNLPEvaluator
     q_idx::Vector{Int}
 
     bb_grad_idx::Vector{Int}
-    bb_hess_struct::Vector{Tuple{Int,Int}}
-    bb_hess_pos::Dict{Tuple{Int,Int},Int}
+
+    bb_rows_local::Vector{Int}
+    bb_cols_local::Vector{Int}
+
+    bb_rows::Vector{Int}
+    bb_cols::Vector{Int}
 
     psd
     Surrogate
@@ -579,13 +577,12 @@ mutable struct TSIEvaluator <: MOI.AbstractNLPEvaluator
 
     approx_type::String
     LMp::Int
-    B0
-
-    S::Vector{Vector{Float64}}
-    Y::Vector{Vector{Float64}}
+    B0::Matrix{Float64}
 
     x_hist::Vector{Vector{Float64}}
     g_hist::Vector{Vector{Float64}}
+    S::Vector{Vector{Float64}}
+    Y::Vector{Vector{Float64}}
 end
 
 function MOI.features_available(::TSIEvaluator)
@@ -613,7 +610,7 @@ end
 # Only one NLP constraint, so g has length 1.
 # ---------------------------------------------------------
 function MOI.eval_constraint(d::TSIEvaluator, g, x)
-    println("Inside eval_constraint")
+    # println("Inside eval_constraint")
     g[1] = TSI_g_bb(
         x,
         d.p_idx,
@@ -638,7 +635,7 @@ end
 # Jacobian values
 # ---------------------------------------------------------
 function MOI.eval_constraint_jacobian(d::TSIEvaluator, J, x)
-    println("Inside eval_constraint_jacobian")
+    # println("Inside eval_constraint_jacobian")
 
     idx, vals, grad_full = TSI_g_bb_grad_sparse(
         x,
@@ -668,47 +665,47 @@ end
 # Only contribution is μ[1] * ∇² TSI
 # ---------------------------------------------------------
 function MOI.hessian_lagrangian_structure(d::TSIEvaluator)
-    return d.bb_hess_struct
+    return collect(zip(d.bb_rows, d.bb_cols))
 end
 
 # ---------------------------------------------------------
 # Hessian values
 # ---------------------------------------------------------
 function MOI.eval_hessian_lagrangian(d::TSIEvaluator, Hval, x, σ, μ)
-    println("Inside eval_hessian_lagrangian")
+
+    # println("Inside eval_hessian_lagrangian")
 
     fill!(Hval, 0.0)
 
     μ_tsi = μ[1]
 
-    # local state vector for SR1 memory = [pg; qg]
+    # println(2)
+    # local state vector
     x_local = vcat(x[d.p_idx], x[d.q_idx])
+
+    # println(3)
     push!(d.x_hist, copy(x_local))
     if length(d.x_hist) > 2
         popfirst!(d.x_hist)
     end
 
-    rows = Int[]
-    cols = Int[]
-    vals = Float64[]
-
+    # println(4)
     if length(d.x_hist) == 1
-        rows0, cols0, vals0 = findnz(sparse(d.B0))
-        idx_map = vcat(d.p_idx, d.q_idx)
-        rows = idx_map[rows0]
-        cols = idx_map[cols0]
-        vals = vals0
+
+        # println(5)
+        B = d.B0
+
     else
+
+        # println(6)
         s = d.x_hist[2] - d.x_hist[1]
         y = d.g_hist[2] - d.g_hist[1]
 
         push!(d.S, s)
         push!(d.Y, y)
 
-        rows, cols, vals, top = TSI_g_bb_hess_sparse(
-            x,
-            d.p_idx,
-            d.q_idx,
+        # println(7)
+        B = TSI_g_bb_hess_values(
             d.st_args,
             d.B0,
             d.S,
@@ -716,7 +713,7 @@ function MOI.eval_hessian_lagrangian(d::TSIEvaluator, Hval, x, σ, μ)
             d.approx_type,
         )
 
-        push!(d.top_indices, top)
+        # push!(d.top_indices, top)
 
         if length(d.S) > d.LMp
             popfirst!(d.S)
@@ -724,11 +721,22 @@ function MOI.eval_hessian_lagrangian(d::TSIEvaluator, Hval, x, σ, μ)
         end
     end
 
-    # scatter into the fixed Hessian structure
+    # println(8)
+    # only compute values at the fixed sparsity pattern
+
+    vals = B[CartesianIndex.(d.bb_rows_local, d.bb_cols_local)]
+
+    # println(length(d.bb_rows_local))
+    # println(length(vals))
+    # println(length(Hval))
+
     for k in eachindex(vals)
-        p = d.bb_hess_pos[(rows[k], cols[k])]
-        Hval[p] += μ_tsi * vals[k]
+        Hval[k] = μ_tsi * vals[k]
     end
+
+    # println(9)
+    # Hval .= μ * vals
+    # println(10)
 
     return
 end
@@ -755,7 +763,7 @@ function build_moi_solver_with_TSI!(
     approx_type::String = "Sparse",
     r::Int = 6,
 )
-    println("Attaching TSI evaluator on MOI solver")
+    # println("Attaching TSI evaluator on MOI solver")
 
     # -----------------------------------------------------
     # 2) Copy JuMP backend into solver model
@@ -772,8 +780,8 @@ function build_moi_solver_with_TSI!(
     p_dest = [index_map[vi].value for vi in p_src]
     q_dest = [index_map[vi].value for vi in q_src]
 
-    println("p_g indices = ", p_dest[1:min(end,5)], " ...")
-    println("q_g indices = ", q_dest[1:min(end,5)], " ...")
+    # println("p_g indices = ", p_dest[1:min(end,5)], " ...")
+    # println("q_g indices = ", q_dest[1:min(end,5)], " ...")
 
     n = MOI.get(opt, MOI.NumberOfVariables())
     N_gen = st_args["numb_active_gen"]
@@ -833,16 +841,14 @@ function build_moi_solver_with_TSI!(
 
     st_args["top_idx"] = top
 
+    # println("Top_idx: $top")
+
     idx_map = vcat(p_dest, q_dest)
-    rows0 = idx_map[rows_local]
-    cols0 = idx_map[cols_local]
+    rows_0 = idx_map[rows_local]
+    cols_0 = idx_map[cols_local]
 
-
-    bb_hess_struct = collect(zip(rows0, cols0))
-    bb_hess_pos = Dict{Tuple{Int,Int},Int}()
-    for (k, rc) in enumerate(bb_hess_struct)
-        bb_hess_pos[rc] = k
-    end
+    bb_rows = rows_0
+    bb_cols = cols_0
 
     # -----------------------------------------------------
     # 5) Create evaluator
@@ -853,8 +859,10 @@ function build_moi_solver_with_TSI!(
         p_dest,
         q_dest,
         bb_grad_idx,
-        bb_hess_struct,
-        bb_hess_pos,
+        rows_local,
+        cols_local,
+        bb_rows,
+        bb_cols,
         psd,
         Surrogate,
         st_args,
@@ -879,9 +887,9 @@ function build_moi_solver_with_TSI!(
     MOI.set(opt, MOI.NLPBlock(), nlp_block)
 
     block = MOI.get(opt, MOI.NLPBlock())
-    println("NLP block attached: ", block !== nothing)
-    println("Number of NLP constraints: ", length(block.constraint_bounds))
-    println("Constraint bounds: ", block.constraint_bounds)
+    # println("NLP block attached: ", block !== nothing)
+    # println("Number of NLP constraints: ", length(block.constraint_bounds))
+    # println("Constraint bounds: ", block.constraint_bounds)
 
     return index_map, src_backend
 end
@@ -916,7 +924,7 @@ function TSACOPF_sparse_Limited_Memory_SR1(
     approx_type::String = "Sparse",
     r::Int = 6,
 )
-    println("Inside the solver for sparse")
+    # println("Inside the solver for sparse")
 
     st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
     x0 = get_primal_starting_point(psd)
@@ -926,11 +934,11 @@ function TSACOPF_sparse_Limited_Memory_SR1(
     # -----------------------------------------------------
     m, model_data = create_basecase_model_TSI(psd, x0)
 
-    println("Constraint types in original JuMP model:")
-    for (F,S) in JuMP.list_of_constraint_types(m)
-        println("F = ", F, "   S = ", S,
-                "   count = ", JuMP.num_constraints(m, F, S))
-    end
+    # println("Constraint types in original JuMP model:")
+    # for (F,S) in JuMP.list_of_constraint_types(m)
+    #     println("F = ", F, "   S = ", S,
+    #             "   count = ", JuMP.num_constraints(m, F, S))
+    # end
 
     # -----------------------------------------------------
     # 2) Build MOI solver and attach TSI evaluator

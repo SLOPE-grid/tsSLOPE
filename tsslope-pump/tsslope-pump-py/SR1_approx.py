@@ -42,7 +42,7 @@ def SR1_approx_Limited(B0, y, s):
 
     return B
 
-def SR1_spar_Sparse(B0, y, s):
+def find_sparse_pattern(B0, y, s):
     """
     Sparse block SR1 Hessian approximation.
     Mel is currently set to sqrt(10 n) but will later be
@@ -50,7 +50,6 @@ def SR1_spar_Sparse(B0, y, s):
     """
     n = 10
 
-    # Build compact SR1 quantities
     L, D, S, Y = make_L_D_S_Y(s, y)
 
     # Compact SR1 form:  B = B0 + N M^{-1} N^T
@@ -87,11 +86,61 @@ def SR1_spar_Sparse(B0, y, s):
     B_til = B0 + Q_til @ np.diag(w) @ Q_til.T
 
     rows, cols = np.nonzero(B_til)
+
+    mask = rows >= cols
+    rows = rows[mask]
+    cols = cols[mask]
+
     vals = B_til[rows, cols]
 
-    return rows + 1, cols + 1, vals
+    return rows + 1, cols + 1, top_idx
 
-def hess_approx(B, S, Y, approx_type="Sparse"):
+def SR1_spar_Sparse(B0, y, s, top_idx):
+    """
+    Sparse block SR1 Hessian approximation.
+    Mel is currently set to sqrt(10 n) but will later be
+    exposed as a tunable sparsity parameter.
+    """
+    # n = 10
+
+    # Build compact SR1 quantities
+    print(f"len(s): {len(s)}")
+    print(f"Number of entries in s: {len(s[0])}")
+    print(f"len(y): {len(y)}")
+    print(f"Number of entries in y: {len(y[0])}")
+
+
+    L, D, S, Y = make_L_D_S_Y(s, y)
+
+    # Compact SR1 form:  B = B0 + N M^{-1} N^T
+    N = Y - B0 @ S
+    M = D + L + L.T - S.T @ B0 @ S
+
+    # Reduce eigenproblem via thin QR
+    Q, R = np.linalg.qr(N, mode='reduced')
+
+    # Compute projected matrix
+    Z = np.linalg.solve(M, R.T)
+    T = R @ Z
+
+    # Eigen-decomposition in reduced space
+    w, UT = np.linalg.eigh(T)
+    U = Q @ UT
+
+    # Re-orthonormalize selected rows
+    U_sub = U[top_idx, :]
+    Q_sub, _ = np.linalg.qr(U_sub, mode='reduced')
+
+    # Embed sparse basis
+    Q_til = np.zeros_like(U)
+    Q_til[top_idx, :] = Q_sub
+
+    # Sparse low-rank SR1 update
+    B_til = B0 + Q_til @ np.diag(w) @ Q_til.T
+
+    return B_til
+
+def hess_approx(B, S, Y, approx_type="Sparse", top_indices = []):
 
     if approx_type == "Full":
         return SR1_approx_Full(B, Y, S)
@@ -100,8 +149,17 @@ def hess_approx(B, S, Y, approx_type="Sparse"):
         return SR1_approx_Limited(B, S, Y)
 
     elif approx_type == "Sparse":
-        return SR1_spar_Sparse(B, S, Y)
+        if len(S) == 0:
+            return B
+        else:
+            return SR1_spar_Sparse(B, S, Y, top_indices)
+
+    elif approx_type == "Sparse_pattern":
+            return find_sparse_pattern(B, S, Y)
 
     else:
-        return SR1_spar_Sparse(B, S, Y)
+        if len(S) == 0:
+            return B
+        else:
+            return SR1_spar_Sparse(B, S, Y)
 

@@ -14,12 +14,23 @@ const CACHE = Dict{UInt64, Any}()
 
 function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Union{Nothing, Bool} = false, save_Hess::Union{Nothing, Bool} = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, String} = nothing, Hess_approx::Union{Nothing, Bool} = false, gamma::Union{Nothing, Float64} = nothing, approx_type::Union{Nothing, String} = nothing, r::Union{Nothing, Int} = nothing)
 
-	opt = optimizer_with_attributes(Ipopt.Optimizer,
-		                            "sb" => "yes",
-		                            # "linear_solver" => "ma57",
-                                    "max_iter" =>  max_iter,
-                                    "print_timing_statistics" => "yes",
-                                    )
+    if approx_type == "Sparse"
+        opt = MOI.instantiate(optimizer_with_attributes(
+                                Ipopt.Optimizer,
+                                "sb" => "yes",
+                                "max_iter" => max_iter,
+                                "print_timing_statistics" => "yes",
+                                );
+                                with_bridge_type = Float64
+                            )
+    else
+        opt = optimizer_with_attributes(Ipopt.Optimizer,
+                                        "sb" => "yes",
+                                        # "linear_solver" => "ma57",
+                                        "max_iter" =>  max_iter,
+                                        "print_timing_statistics" => "yes",
+                                        )
+    end
 
     # Case when there is no surrogate 
     if Surrogate["model_type"] == nothing
@@ -35,7 +46,6 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
         Full memory SR1: Full
         Limited memory SR1: Limited
         Sparse limited memory SR1: Sparse")
-    end
 
     # Case when full memory SR1 is used for the Hessian
     elseif approx_type == "Full"
@@ -43,6 +53,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 
     # Case when limited memory SR1 is used for the Hessian
     elseif approx_type == "Limited"
+        println("In sparse")
         return TSACOPF_Limited_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, r = r)
 
     # Case when sparse limited memory SR1 is used for the Hessian
@@ -270,9 +281,9 @@ function TSACOPF_Full_Memory_SR1(instance_dir::String, solution_dir::String, pf_
 
                 push!(B, hess)
                 popfirst!(B)
-            end
 
-            iter += 1
+                iter += 1
+            end
 
             for i = 1:2*N_gen
                 for j = 1:i
@@ -326,6 +337,7 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
     iter = 1
 
     # limited memory parameter
+    println(r)
     LMp = r   
 
     N_gen = st_args["numb_active_gen"]
@@ -336,9 +348,7 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
     g = Vector{Vector{Float64}}()
     S = Vector{Vector{Float64}}()
     Y = Vector{Vector{Float64}}()
-    B = Vector{Matrix{Float64}}()
     grad_temp = Vector{Vector{Float64}}()
-    push!(B, B0)
 
     function tsif(args...)
         pg_vec = collect(args[1:N_gen])
@@ -377,6 +387,8 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 
             if iter == 1
                 hess = B0
+
+                iter += 1
             else
                 push!(S, x[2] - x[1])
                 push!(Y, g[2] - g[1])
@@ -389,9 +401,8 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
                     popfirst!(S)
                     popfirst!(Y)
                 end
-            end
 
-            iter += 1
+            end
 
             for i = 1:2*N_gen
                 for j = 1:i
@@ -411,6 +422,13 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
     end
 
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="output")
+
+    for i = 1:r
+        println("S[$i]: max=", maximum(S[i]), 
+                " min=", minimum(S[i]))
+        println("Y[$i]: max=", maximum(Y[i]), 
+                " min=", minimum(Y[i]))
+    end
     
     total_time = MOI.get(m, MOI.SolveTimeSec())
 
@@ -428,466 +446,462 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 
 end
 
-# function TSACOPF_sparse_Limited_Memory_SR1(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; max_iter::Int = 200, gamma::Float64 = 0., approx_type::String = "Sparse", r::Int = 6)
-# 	print("done.\nCreating index lists for TSI constraint ...")
-# 	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
-		
-# 	print("done.\nSolving basecase using sparse OPF ...")
-                  
-#     # get primal starting point
-#     x0 = get_primal_starting_point(psd)
 
-# 	# create model
-#     m, model_data = create_basecase_model(psd, opt, x0)
-
-#     hess_analy =  Dict{Int, Dict{String,Any}}()
-
-#     # Used to store spectral data
-#     iter = 1
-
-#     # limited memory parameter
-#     LMp = r   
-
-#     N_gen = st_args["numb_active_gen"]
-
-#     # For SR1 Hessian approximation
-#     B0 = gamma * Matrix{Float64}(I, 2*N_gen, 2*N_gen)
-#     x = Vector{Vector{Float64}}()
-#     g = Vector{Vector{Float64}}()
-#     S = Vector{Vector{Float64}}()
-#     Y = Vector{Vector{Float64}}()
-#     grad_temp = Vector{Vector{Float64}}()
-
-#     function tsif(args...)
-#         pg_vec = collect(args[1:N_gen])
-#         qg_vec = collect(args[N_gen+1:2*N_gen])
-#         return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
-#     end
-
-#     function tsig(g::AbstractVector, args...)
-#         pg_vec = collect(args[1:N_gen])
-#         qg_vec = collect(args[N_gen+1:2*N_gen])
-#         idx, grad_val, grad = TSIConstraintPrime(psd, Surrogate, st_args, pg_vec, qg_vec, approx_type)
-#         push!(grad_temp, grad)
-#         g[1:2*N_gen] .= grad  
-#     end
-
-#     function tsih(h::AbstractMatrix, args...)
-
-#         pg_vec = collect(args[1:N_gen])
-#         qg_vec = collect(args[N_gen+1:2*N_gen])
-#         hsh = hash(pg_vec)
-
-#         if haskey(CACHE, hsh)
-#             h =  CACHE[hsh]
-#             return
-#         else
-#             grad = grad_temp[end]
-#             popfirst!(grad_temp)
-#             x_temp = zeros(2*N_gen)
-#             x_temp[1:N_gen] .= pg_vec 
-#             if Surrogate["model_type"] == "CNF"
-#                 x_temp[N_gen+1:2*N_gen] .= qg_vec 
-#             end
-#             push!(x, x_temp)
-#             push!(g, grad)
-
-#             if iter == 1
-#                 hess = B0
-#             else
-#                 push!(S, x[2] - x[1])
-#                 push!(Y, g[2] - g[1])
-#                 popfirst!(x)
-#                 popfirst!(g)
-
-#                 I, J, V = TSIConstraintHessApprox(st_args, B0, S, Y, approx_type)
-
-#                 if length(S) > LMp
-#                     popfirst!(S)
-#                     popfirst!(Y)
-#                 end
-#             end
-
-#             iter += 1
-
-#             for i = 1:2*N_gen
-#                 for j = 1:i
-#                     h[i, j] = hess[i,j]
-#                 end
-#             end
-#             CACHE[hsh] = h
-#         end     
-#     end
-
-#     register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
-
-#     @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= tau )
-    
-#     if !ispath(solution_dir)
-#         mkpath(solution_dir)
-#     end
-
-#     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="output")
-    
-#     total_time = MOI.get(m, MOI.SolveTimeSec())
-
-#     termination_status = MOI.get(m, MOI.TerminationStatus())
-#     num_iter = MOI.get(m, MOI.BarrierIterations())
- 
-#     Surr_Feasibility_margin = TSIConstraint(psd, Surrogate, st_args, solution.p_g, solution.q_g) - tau
-#     grad = TSIConstraintPrime(psd, Surrogate, st_args, solution.p_g, solution.q_g)
-#     norm_grad = dot(grad, grad)
-        
-# 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
-# 		".\nWriting solution to "*solution_dir*" ... \n")
-
-#     return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g, hess_analy
-
-# end
 
 
 # ---------------------------------------------------------
-# Build symbolic nonlinear model
+# TSI black-box API
+# x is in solver variable order
 # ---------------------------------------------------------
 
-function build_symbolic_nlp_and_bounds(jm::JuMP.Model)
-
-    nlp = MOI.Nonlinear.Model()
-    bounds = MOI.NLPBoundsPair[]
-
-    for (F,S) in JuMP.list_of_constraint_types(jm)
-
-        if F <: JuMP.VariableRef
-            continue
-        end
-
-        for ci in JuMP.all_constraints(jm,F,S)
-
-            obj = JuMP.constraint_object(ci)
-
-            MOI.Nonlinear.add_constraint(nlp,obj.func,obj.set)
-
-            if obj.set isa MOI.LessThan
-                push!(bounds, MOI.NLPBoundsPair(-Inf,obj.set.upper))
-
-            elseif obj.set isa MOI.GreaterThan
-                push!(bounds, MOI.NLPBoundsPair(obj.set.lower,Inf))
-
-            elseif obj.set isa MOI.EqualTo
-                push!(bounds, MOI.NLPBoundsPair(obj.set.value,obj.set.value))
-
-            elseif obj.set isa MOI.Interval
-                push!(bounds, MOI.NLPBoundsPair(obj.set.lower,obj.set.upper))
-            end
-        end
+_bounds_pair(set) = begin
+    if set isa MOI.LessThan
+        return MOI.NLPBoundsPair(-Inf, set.upper)
+    elseif set isa MOI.GreaterThan
+        return MOI.NLPBoundsPair(set.lower, Inf)
+    elseif set isa MOI.EqualTo
+        return MOI.NLPBoundsPair(set.value, set.value)
+    elseif set isa MOI.Interval
+        return MOI.NLPBoundsPair(set.lower, set.upper)
+    else
+        error("Unsupported nonlinear constraint set type: $(typeof(set))")
     end
+end
 
-    MOI.Nonlinear.set_objective(nlp,JuMP.objective_function(jm))
+const MOI = JuMP.MOI
 
-    return nlp,bounds
+# ---------------------------------------------------------
+# TSI value in solver-variable ordering
+# ---------------------------------------------------------
+function TSI_g_bb(
+    x::Vector{Float64},
+    p_idx::Vector{Int},
+    q_idx::Vector{Int},
+    psd,
+    Surrogate,
+    st_args,
+)
+    pg = x[p_idx]
+    qg = x[q_idx]
+    return TSIConstraint(psd, Surrogate, st_args, pg, qg)
 end
 
 
 # ---------------------------------------------------------
-# Mixed evaluator
+# Sparse TSI gradient in solver-variable ordering
+#
+# Returns:
+#   idx_global :: Vector{Int}
+#   vals       :: Vector{Float64}
+#   grad_full  :: Vector{Float64}   (length 2N_gen, local ordering [pg; qg])
 # ---------------------------------------------------------
+function TSI_g_bb_grad_sparse(
+    x::Vector{Float64},
+    p_idx::Vector{Int},
+    q_idx::Vector{Int},
+    psd,
+    Surrogate,
+    st_args,
+    approx_type::String,
+)
+    pg = x[p_idx]
+    qg = x[q_idx]
 
-struct TSIMixedEvaluator{E<:MOI.AbstractNLPEvaluator} <: MOI.AbstractNLPEvaluator
+    idx_local, vals, grad_full = TSIConstraintPrime(
+        psd,
+        Surrogate,
+        st_args,
+        pg,
+        qg,
+        approx_type,
+    )
 
-    sym::E
+    # local ordering is [pg; qg]
+    idx_map = vcat(p_idx, q_idx)
+    idx_global = idx_map[idx_local]
 
+    return idx_global, vals, grad_full
+end
+
+
+# ---------------------------------------------------------
+# Sparse TSI Hessian in solver-variable ordering
+#
+# Returns:
+#   rows_global :: Vector{Int}
+#   cols_global :: Vector{Int}
+#   vals        :: Vector{Float64}
+#   top         :: Any
+# ---------------------------------------------------------
+function TSI_g_bb_hess_sparse(
+    x::Vector{Float64},
+    p_idx::Vector{Int},
+    q_idx::Vector{Int},
+    st_args,
+    B0,
+    S,
+    Y,
+    approx_type::String,
+)
+    rows_local, cols_local, vals, top = TSIConstraintHessApprox(
+        st_args,
+        B0,
+        S,
+        Y,
+        approx_type,
+    )
+
+    idx_map = vcat(p_idx, q_idx)
+    rows_global = idx_map[rows_local]
+    cols_global = idx_map[cols_local]
+
+    return rows_global, cols_global, vals, top
+end
+
+# ---------------------------------------------------------
+# Evaluator for one black-box nonlinear constraint:
+#       TSI(pg, qg) >= tau
+# ---------------------------------------------------------
+mutable struct TSIEvaluator <: MOI.AbstractNLPEvaluator
     n::Int
-    m_sym::Int
     N_gen::Int
 
-    jac_sym_struct
-    hess_sym_struct
+    p_idx::Vector{Int}
+    q_idx::Vector{Int}
 
-    bb_grad_idx
-    bb_hess_struct
+    bb_grad_idx::Vector{Int}
+    bb_hess_struct::Vector{Tuple{Int,Int}}
+    bb_hess_pos::Dict{Tuple{Int,Int},Int}
 
     psd
     Surrogate
     st_args
 
-    approx_type
-    LMp
-
+    approx_type::String
+    LMp::Int
     B0
 
-    S
-    Y
+    S::Vector{Vector{Float64}}
+    Y::Vector{Vector{Float64}}
 
-    x_hist
-    g_hist
+    x_hist::Vector{Vector{Float64}}
+    g_hist::Vector{Vector{Float64}}
 end
 
-
-MOI.features_available(d::TSIMixedEvaluator) =
-    MOI.features_available(d.sym)
-
-function MOI.initialize(d::TSIMixedEvaluator,features)
-    MOI.initialize(d.sym,features)
+function MOI.features_available(::TSIEvaluator)
+    return [:Grad, :Jac, :Hess]
 end
 
-
-# ---------------------------------------------------------
-# Objective
-# ---------------------------------------------------------
-
-MOI.eval_objective(d::TSIMixedEvaluator,x) =
-    MOI.eval_objective(d.sym,x)
-
-function MOI.eval_objective_gradient(d::TSIMixedEvaluator,g,x)
-    MOI.eval_objective_gradient(d.sym,g,x)
+function MOI.initialize(d::TSIEvaluator, requested_features)
+    println("TSI evaluator initialized with ", requested_features)
+    return
 end
 
+# We do NOT provide a nonlinear objective.
+# These are harmless to define anyway.
+function MOI.eval_objective(d::TSIEvaluator, x)
+    return 0.0
+end
+
+function MOI.eval_objective_gradient(d::TSIEvaluator, g, x)
+    fill!(g, 0.0)
+    return
+end
 
 # ---------------------------------------------------------
-# Constraint value
+# Nonlinear constraint values
+# Only one NLP constraint, so g has length 1.
 # ---------------------------------------------------------
-
-function MOI.eval_constraint(d::TSIMixedEvaluator,g,x)
-
-    MOI.eval_constraint(d.sym,view(g,1:d.m_sym),x)
-
-    pg = x[1:d.N_gen]
-    qg = x[d.N_gen+1:2*d.N_gen]
-
-    g[d.m_sym+1] =
-        TSIConstraint(
-            d.psd,
-            d.Surrogate,
-            d.st_args,
-            pg,
-            qg
-        )
+function MOI.eval_constraint(d::TSIEvaluator, g, x)
+    println("Inside eval_constraint")
+    g[1] = TSI_g_bb(
+        x,
+        d.p_idx,
+        d.q_idx,
+        d.psd,
+        d.Surrogate,
+        d.st_args,
+    )
+    return
 end
 
 
 # ---------------------------------------------------------
 # Jacobian structure
+# One row only, with sparse columns bb_grad_idx
 # ---------------------------------------------------------
-
-function MOI.jacobian_structure(d::TSIMixedEvaluator)
-
-    jac = copy(d.jac_sym_struct)
-
-    row = d.m_sym + 1
-
-    for j in d.bb_grad_idx
-        push!(jac,(row,j))
-    end
-
-    return jac
+function MOI.jacobian_structure(d::TSIEvaluator)
+    return [(1, j) for j in d.bb_grad_idx]
 end
-
 
 # ---------------------------------------------------------
 # Jacobian values
 # ---------------------------------------------------------
+function MOI.eval_constraint_jacobian(d::TSIEvaluator, J, x)
+    println("Inside eval_constraint_jacobian")
 
-function MOI.eval_constraint_jacobian(d::TSIMixedEvaluator,J,x)
+    idx, vals, grad_full = TSI_g_bb_grad_sparse(
+        x,
+        d.p_idx,
+        d.q_idx,
+        d.psd,
+        d.Surrogate,
+        d.st_args,
+        d.approx_type,
+    )
 
-    ns = length(d.jac_sym_struct)
+    @assert idx == d.bb_grad_idx
 
-    MOI.eval_constraint_jacobian(d.sym,view(J,1:ns),x)
-
-    pg = x[1:d.N_gen]
-    qg = x[d.N_gen+1:2*d.N_gen]
-
-    idx,vals,grad =
-        TSIConstraintPrime(
-            d.psd,
-            d.Surrogate,
-            d.st_args,
-            pg,
-            qg,
-            d.approx_type
-        )
-
-    push!(d.g_hist,grad)
-
-    offset = ns
+    push!(d.g_hist, grad_full)
+    if length(d.g_hist) > 2
+        popfirst!(d.g_hist)
+    end
 
     for k in eachindex(vals)
-        J[offset+k] = vals[k]
+        J[k] = vals[k]
     end
+    return
 end
 
-
 # ---------------------------------------------------------
-# Hessian structure
+# Hessian structure of the Lagrangian
+# Only contribution is μ[1] * ∇² TSI
 # ---------------------------------------------------------
-
-function MOI.hessian_lagrangian_structure(d::TSIMixedEvaluator)
-
-    H = copy(d.hess_sym_struct)
-
-    append!(H,d.bb_hess_struct)
-
-    return H
+function MOI.hessian_lagrangian_structure(d::TSIEvaluator)
+    return d.bb_hess_struct
 end
-
 
 # ---------------------------------------------------------
 # Hessian values
 # ---------------------------------------------------------
+function MOI.eval_hessian_lagrangian(d::TSIEvaluator, Hval, x, σ, μ)
+    println("Inside eval_hessian_lagrangian")
 
-function MOI.eval_hessian_lagrangian(d,Hval,x,σ,μ)
+    fill!(Hval, 0.0)
 
-    ns = length(d.hess_sym_struct)
+    μ_tsi = μ[1]
 
-    MOI.eval_hessian_lagrangian(
-        d.sym,
-        view(Hval,1:ns),
-        x,
-        σ,
-        view(μ,1:d.m_sym)
-    )
+    # local state vector for SR1 memory = [pg; qg]
+    x_local = vcat(x[d.p_idx], x[d.q_idx])
+    push!(d.x_hist, copy(x_local))
+    if length(d.x_hist) > 2
+        popfirst!(d.x_hist)
+    end
 
-    μ_tsi = μ[d.m_sym+1]
-
-    x_temp = x[1:2*d.N_gen]
-
-    push!(d.x_hist,x_temp)
+    rows = Int[]
+    cols = Int[]
+    vals = Float64[]
 
     if length(d.x_hist) == 1
-
-        rows,cols,vals = findnz(d.B0)
-
+        rows0, cols0, vals0 = findnz(sparse(d.B0))
+        idx_map = vcat(d.p_idx, d.q_idx)
+        rows = idx_map[rows0]
+        cols = idx_map[cols0]
+        vals = vals0
     else
+        s = d.x_hist[2] - d.x_hist[1]
+        y = d.g_hist[2] - d.g_hist[1]
 
-        s = d.x_hist[end] - d.x_hist[end-1]
-        y = d.g_hist[end] - d.g_hist[end-1]
+        push!(d.S, s)
+        push!(d.Y, y)
 
-        push!(d.S,s)
-        push!(d.Y,y)
+        rows, cols, vals, top = TSI_g_bb_hess_sparse(
+            x,
+            d.p_idx,
+            d.q_idx,
+            d.st_args,
+            d.B0,
+            d.S,
+            d.Y,
+            d.approx_type,
+        )
+
+        push!(d.top_indices, top)
 
         if length(d.S) > d.LMp
             popfirst!(d.S)
             popfirst!(d.Y)
         end
-
-        rows,cols,vals =
-            TSIConstraintHessApprox(
-                d.st_args,
-                d.B0,
-                d.S,
-                d.Y,
-                d.approx_type
-            )
     end
 
-    offset = ns
-
+    # scatter into the fixed Hessian structure
     for k in eachindex(vals)
-        Hval[offset+k] = μ_tsi * vals[k]
+        p = d.bb_hess_pos[(rows[k], cols[k])]
+        Hval[p] += μ_tsi * vals[k]
     end
 
+    return
 end
 
-
 # ---------------------------------------------------------
-# Attach evaluator
+# Build an MOI/Ipopt solver from the JuMP basecase model,
+# copy the ACOPF model into it, and attach the TSI NLP block.
+#
+# Returns:
+#   opt       :: MOI optimizer
+#   index_map :: MOI index map from source backend -> opt
+#   src_backend
 # ---------------------------------------------------------
-
-function attach_TSI_evaluator(
-    model,
+function build_moi_solver_with_TSI!(
+    m::JuMP.Model,
     psd,
+    opt,
+    x0,
     Surrogate,
     st_args,
-    tau,
-    gamma,
-    approx_type,
-    r
+    tau::Float64,
+    max_iter::Int;
+    gamma::Float64 = 0.0,
+    approx_type::String = "Sparse",
+    r::Int = 6,
 )
+    println("Attaching TSI evaluator on MOI solver")
 
-    nlp_sym,bounds =
-        build_symbolic_nlp_and_bounds(model)
+    # -----------------------------------------------------
+    # 2) Copy JuMP backend into solver model
+    # -----------------------------------------------------
+    src_backend = JuMP.backend(m)
+    index_map = MOI.copy_to(opt, src_backend)
 
-    xvars = JuMP.all_variables(model)
-    vidx = JuMP.index.(xvars)
+    # -----------------------------------------------------
+    # 3) Recover p_g and q_g destination indices in solver
+    # -----------------------------------------------------
+    p_src = JuMP.index.(m[:p_g])
+    q_src = JuMP.index.(m[:q_g])
 
-    sym_eval =
-        MOI.Nonlinear.Evaluator(
-            nlp_sym,
-            MOI.Nonlinear.SparseReverseMode(),
-            vidx
-        )
+    p_dest = [index_map[vi].value for vi in p_src]
+    q_dest = [index_map[vi].value for vi in q_src]
 
-    MOI.initialize(sym_eval,[:Grad,:Jac,:Hess])
+    println("p_g indices = ", p_dest[1:min(end,5)], " ...")
+    println("q_g indices = ", q_dest[1:min(end,5)], " ...")
 
-    jac_struct =
-        MOI.jacobian_structure(sym_eval)
-
-    hess_struct =
-        MOI.hessian_lagrangian_structure(sym_eval)
-
+    n = MOI.get(opt, MOI.NumberOfVariables())
     N_gen = st_args["numb_active_gen"]
 
-    idx,_ =
-        TSIConstraintPrime(
-            psd,
-            Surrogate,
-            st_args,
-            zeros(N_gen),
-            zeros(N_gen),
-            approx_type
-        )
+    # -----------------------------------------------------
+    # 4) Fix the sparse pattern once
+    # -----------------------------------------------------
 
-    if gamma == 0
-        B0 = zeros(2*N_gen,2*N_gen)
-    else
-        B0 = gamma * Matrix{Float64}(I,2*N_gen,2*N_gen)
+    # fixed pattern for gradient
+    pg = x0[:p_g]
+    qg = x0[:q_g]
+
+    idx_local = 1:(length(pg) + length(qg))
+
+    idx_map = vcat(p_dest, q_dest)
+    bb_grad_idx = idx_map[idx_local]
+
+
+    # Fixed pattern for Hessian
+    B0 =
+        gamma == 0.0 ?
+        spzeros(2 * N_gen, 2 * N_gen) :
+        gamma * sparse(I, 2 * N_gen, 2 * N_gen)
+
+
+    x = Vector{Vector{Float64}}()
+    g = Vector{Vector{Float64}}()
+    S = Vector{Vector{Float64}}()
+    Y = Vector{Vector{Float64}}()
+
+    for i = 1:(r+1)
+        x_temp = zeros(2*N_gen)
+        pg_noise = pg + rand(Uniform(-1e-4, 1e-4), length(pg))
+        x_temp[1:N_gen] .= pg_noise 
+        if Surrogate["model_type"] == "CNF"
+            qg_noise = qg + rand(Uniform(-1e-4, 1e-4), length(qg))
+            x_temp[N_gen+1:2*N_gen] .= qg_noise
+        end
+        grad = TSIConstraintPrime(psd, Surrogate, st_args, pg_noise, qg_noise)
+        push!(x, x_temp)
+        push!(g, grad)
+        if i > 1
+            push!(S, x[2] - x[1])
+            push!(Y, g[2] - g[1])
+            popfirst!(x)
+            popfirst!(g)
+        end
     end
 
-    rows,cols,_ =
-        TSIConstraintHessApprox(
-            st_args,
-            B0,
-            [],
-            [],
-            approx_type
-        )
+    rows_local, cols_local, top = TSIConstraintHessApprox(
+        st_args,
+        B0,
+        S,
+        Y,
+        "Sparse_pattern",
+    )
 
-    bb_struct = collect(zip(rows,cols))
+    st_args["top_idx"] = top
 
-    evaluator =
-        TSIMixedEvaluator(
-            sym_eval,
-            length(xvars),
-            length(bounds),
-            N_gen,
-            jac_struct,
-            hess_struct,
-            idx,
-            bb_struct,
-            psd,
-            Surrogate,
-            st_args,
-            approx_type,
-            r,
-            B0,
-            Vector{Vector{Float64}}(),
-            Vector{Vector{Float64}}(),
-            Vector{Vector{Float64}}(),
-            Vector{Vector{Float64}}()
-        )
+    idx_map = vcat(p_dest, q_dest)
+    rows0 = idx_map[rows_local]
+    cols0 = idx_map[cols_local]
 
-    push!(bounds,MOI.NLPBoundsPair(tau,Inf))
 
-    nlp_block =
-        MOI.NLPBlockData(bounds,evaluator,true)
+    bb_hess_struct = collect(zip(rows0, cols0))
+    bb_hess_pos = Dict{Tuple{Int,Int},Int}()
+    for (k, rc) in enumerate(bb_hess_struct)
+        bb_hess_pos[rc] = k
+    end
 
-    MOI.set(model,MOI.NLPBlock(),nlp_block)
+    # -----------------------------------------------------
+    # 5) Create evaluator
+    # -----------------------------------------------------
+    evaluator = TSIEvaluator(
+        n,
+        N_gen,
+        p_dest,
+        q_dest,
+        bb_grad_idx,
+        bb_hess_struct,
+        bb_hess_pos,
+        psd,
+        Surrogate,
+        st_args,
+        approx_type,
+        r,
+        Matrix(B0),
+        Vector{Vector{Float64}}(),
+        Vector{Vector{Float64}}(),
+        Vector{Vector{Float64}}(),
+        Vector{Vector{Float64}}(),
+    )
 
+    # -----------------------------------------------------
+    # 6) Attach nonlinear block
+    # One nonlinear constraint: TSI(pg,qg) >= tau
+    # Objective is already copied from the JuMP model,
+    # so has_objective = false.
+    # -----------------------------------------------------
+    bounds = [MOI.NLPBoundsPair(tau, Inf)]
+    nlp_block = MOI.NLPBlockData(bounds, evaluator, false)
+
+    MOI.set(opt, MOI.NLPBlock(), nlp_block)
+
+    block = MOI.get(opt, MOI.NLPBlock())
+    println("NLP block attached: ", block !== nothing)
+    println("Number of NLP constraints: ", length(block.constraint_bounds))
+    println("Constraint bounds: ", block.constraint_bounds)
+
+    return index_map, src_backend
 end
 
-
 # ---------------------------------------------------------
-# Main solver
+# Extract JuMP variable primals from opt using index_map
 # ---------------------------------------------------------
+function get_primal_from_opt(
+    opt,
+    index_map,
+    xref::AbstractArray{JuMP.VariableRef},
+)
+    vals = similar(Float64.(zeros(size(xref))))
+    for I in eachindex(xref)
+        src_vi = JuMP.index(xref[I])
+        dst_vi = index_map[src_vi]
+        vals[I] = MOI.get(opt, MOI.VariablePrimal(), dst_vi)
+    end
+    return vals
+end
 
 function TSACOPF_sparse_Limited_Memory_SR1(
     instance_dir::String,
@@ -898,72 +912,100 @@ function TSACOPF_sparse_Limited_Memory_SR1(
     opt,
     tau;
     max_iter::Int = 200,
-    gamma::Float64 = 0.,
+    gamma::Float64 = 0.0,
     approx_type::String = "Sparse",
-    r::Int = 6
+    r::Int = 6,
 )
+    println("Inside the solver for sparse")
 
-    st_args =
-        load_case(psd,pf_limit_file,Surrogate["model_type"])
+    st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
+    x0 = get_primal_starting_point(psd)
 
-    x0 =
-        get_primal_starting_point(psd)
+    # -----------------------------------------------------
+    # 1) Build JuMP ACOPF model exactly as before
+    # -----------------------------------------------------
+    m, model_data = create_basecase_model_TSI(psd, x0)
 
-    m,model_data =
-        create_basecase_model(psd,opt,x0)
+    println("Constraint types in original JuMP model:")
+    for (F,S) in JuMP.list_of_constraint_types(m)
+        println("F = ", F, "   S = ", S,
+                "   count = ", JuMP.num_constraints(m, F, S))
+    end
 
-    set_optimizer_attribute(m,"max_iter",max_iter)
-
-    attach_TSI_evaluator(
+    # -----------------------------------------------------
+    # 2) Build MOI solver and attach TSI evaluator
+    # -----------------------------------------------------
+    index_map, src_backend = build_moi_solver_with_TSI!(
         m,
         psd,
+        opt,
+        x0,
         Surrogate,
         st_args,
         tau,
-        gamma,
-        approx_type,
-        r
+        max_iter;
+        gamma = gamma,
+        approx_type = approx_type,
+        r = r,
     )
 
-    solution,m =
-        solve_basecase_from_model(
-            m,
-            psd,
-            model_data
-        )
+    # -----------------------------------------------------
+    # 3) Solve directly with MOI
+    # -----------------------------------------------------
+    MOI.optimize!(opt)
 
-    total_time =
-        MOI.get(m,MOI.SolveTimeSec())
-
-    termination_status =
-        MOI.get(m,MOI.TerminationStatus())
+    termination_status = MOI.get(opt, MOI.TerminationStatus())
+    total_time = MOI.get(opt, MOI.SolveTimeSec())
 
     num_iter =
-        MOI.get(m,MOI.BarrierIterations())
+        try
+            MOI.get(opt, MOI.BarrierIterations())
+        catch
+            missing
+        end
 
-    Surr_Feasibility_margin =
+    # -----------------------------------------------------
+    # 4) Recover solution pieces you care about
+    # -----------------------------------------------------
+    p_g_sol = get_primal_from_opt(opt, index_map, m[:p_g])
+    q_g_sol = get_primal_from_opt(opt, index_map, m[:q_g])
+
+    base_cost =
+        try
+            MOI.get(opt, MOI.ObjectiveValue())
+        catch
+            NaN
+        end
+
+    surr_margin =
         TSIConstraint(
             psd,
             Surrogate,
             st_args,
-            solution.p_g,
-            solution.q_g
+            p_g_sol,
+            q_g_sol,
         ) - tau
 
-    grad =
+    _, _, grad =
         TSIConstraintPrime(
             psd,
             Surrogate,
             st_args,
-            solution.p_g,
-            solution.q_g,
-            approx_type
+            p_g_sol,
+            q_g_sol,
+            approx_type,
         )
 
-    norm_grad = dot(grad,grad)
+    norm_grad = dot(grad, grad)
 
-    return num_iter,total_time,solution.base_cost,
-           Surr_Feasibility_margin,termination_status,
-           norm_grad,solution.p_g
+    hess_analy = Dict{Int, Dict{String,Any}}()
 
+    return num_iter,
+           total_time,
+           base_cost,
+           surr_margin,
+           termination_status,
+           norm_grad,
+           p_g_sol,
+           hess_analy
 end

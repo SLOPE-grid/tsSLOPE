@@ -30,8 +30,8 @@ save_Hess = false
 
 active_gen_only = true
 
-# model_type = "CNF"
-model_type = "CNN_Soft"
+model_type = "CNF"
+# model_type = "CNN_Soft"
 # model_type = "None"
 
 max_iter = 300
@@ -46,7 +46,7 @@ t0 = time()
 
 Hess_approx = true
 
-gamma = 100.
+gamma = -100.
 r = 6
 
 approx_type = "Sparse"

@@ -91,7 +91,7 @@ def find_sparse_pattern(B0, y, s):
     rows = rows[mask]
     cols = cols[mask]
 
-    vals = B_til[rows, cols]
+    # vals = B_til[rows, cols]
 
     return rows + 1, cols + 1, top_idx
 
@@ -101,16 +101,6 @@ def SR1_spar_Sparse(B0, y, s, top_idx):
     Mel is currently set to sqrt(10 n) but will later be
     exposed as a tunable sparsity parameter.
     """
-    # n = 10
-
-    # Build compact SR1 quantities
-    # print(f"len(s): {len(s)}")
-    # print(f"Number of entries in s: {len(s[0])}")
-    # print(f"len(y): {len(y)}")
-    # print(f"Number of entries in y: {len(y[0])}")
-    # print(f"len(top_idx): {len(top_idx)}")
-    # print(f"top_idx: {top_idx}")
-
 
     L, D, S, Y = make_L_D_S_Y(s, y)
 
@@ -155,6 +145,7 @@ def hess_approx(B, S, Y, approx_type="Sparse", top_indices = []):
             return B
         else:
             return SR1_spar_Sparse(B, S, Y, top_indices)
+            # return SR1_approx_Limited(B, S, Y)
 
     elif approx_type == "Sparse_pattern":
             return find_sparse_pattern(B, S, Y)

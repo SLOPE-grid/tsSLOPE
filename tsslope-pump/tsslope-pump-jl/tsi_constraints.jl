@@ -77,12 +77,13 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
     grad[1+num_active_gen:2*num_active_gen] = dTSI[(1:num_active_gen).+ numb_gen_loads]
   end
 
-  if approx_type == "Sparse"
-    idx = findall(!iszero, grad)
-    return Int.(idx), Float64.(grad[idx]), Float64.(grad)
-  else
-    return Float64.(grad)
-  end
+  # if approx_type == "Sparse"
+  #   idx = findall(!iszero, grad)
+  #   return Int.(idx), Float64.(grad[idx]), Float64.(grad)
+  # else
+  #   return Float64.(grad)
+  # end
+  return Float64.(grad)
 end
 
 ### define second derivative for the TSI constraint

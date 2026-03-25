@@ -20,9 +20,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
                                     # "linear_solver" => "ma57",
                                     "max_iter" =>  max_iter,
                                     "print_timing_statistics" => "yes",
-                                    # "print_level" => 5,
-                                    # "derivative_test" => "first-order",
-                                    # "derivative_test_print_all" => "yes",
+                                    # "print_level" => 10,
                                     )
 
     # Case when there is no surrogate 
@@ -51,16 +49,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     # Case when sparse limited memory SR1 is used for the Hessian
     else
         #override opt for sparse case
-        opt = MOI.instantiate(optimizer_with_attributes(
-                                Ipopt.Optimizer,
-                                "sb" => "yes",
-                                "max_iter" => max_iter,
-                                "print_timing_statistics" => "yes",
-                                # "print_level" => 5,
-                                # "derivative_test" => "first-order",
-                                # "derivative_test_print_all" => "yes",
-                                );
-                                with_bridge_type = Float64
+        opt = MOI.instantiate(opt; with_bridge_type = Float64
                             )
 
         return TSACOPF_sparse_Limited_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, r = r)
@@ -432,7 +421,7 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
     iter = 1
 
     # limited memory parameter
-    println(r)
+    # println(r)
     LMp = r   
 
     N_gen = st_args["numb_active_gen"]
@@ -497,23 +486,29 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
                     popfirst!(Y)
                 end
 
-                println(
-                    " S info: ", minimum(S[end]), ", ", maximum(S[end]), ", ", minimum(abs.(S[end])), ", ", maximum(abs.(S[end])),
-                )
-                println(            
-                    " Y info: ", minimum(Y[end]), ", ", maximum(Y[end]), ", ", minimum(abs.(Y[end])), ", ", maximum(abs.(Y[end])),
-                )
+                # println(
+                #     " S info: ", minimum(S[end]), ", ", maximum(S[end]), ", ", minimum(abs.(S[end])), ", ", maximum(abs.(S[end])),
+                # )
+                # println(            
+                #     " Y info: ", minimum(Y[end]), ", ", maximum(Y[end]), ", ", minimum(abs.(Y[end])), ", ", maximum(abs.(Y[end])),
+                # )
 
             end
 
+            # println(hess)
+
+            max_val = 0
             for i = 1:2*N_gen
                 for j = 1:i
                     # if i <= 5
-                    #     println("Hess[i,j]: ", hess[i,j])
+                    # println("Hess[$i,$j]: ", hess[i,j])
                     # end
-                    h[i, j] = hess[i,j]
+                    h[i, j] += hess[i,j]
+                    val = hess[i,j]
+                    max_val = max(max_val, val)
                 end
             end
+            println("Max_val: ", max_val)
             CACHE[hsh] = h
         end     
     end
@@ -647,7 +642,6 @@ function TSI_g_bb(
     return TSIConstraint(psd, Surrogate, st_args, pg, qg)
 end
 
-
 # ---------------------------------------------------------
 # Dense TSI gradient in solver-variable ordering
 #
@@ -676,7 +670,6 @@ function TSI_g_bb_grad_sparse(
 
     return grad_full
 end
-
 
 # ---------------------------------------------------------
 # Sparse TSI Hessian in local [pg;qg] ordering
@@ -721,7 +714,6 @@ function TSI_g_bb_hess_values(
     return Hess
 end
 
-
 # =========================================================
 # Mixed evaluator:
 #   symbolic nonlinear block from JuMP/MOI AD
@@ -762,6 +754,7 @@ struct MixedTSIEvaluator{E<:MOI.AbstractNLPEvaluator} <: MOI.AbstractNLPEvaluato
     approx_type::String
     LMp::Int
     B0::SparseMatrixCSC{Float64,Int}
+    I_gamma::SparseMatrixCSC{Float64,Int}
 
     # SR1 history
     x_hist::Vector{Vector{Float64}}
@@ -769,6 +762,7 @@ struct MixedTSIEvaluator{E<:MOI.AbstractNLPEvaluator} <: MOI.AbstractNLPEvaluato
     g_hist_temp::Vector{Vector{Float64}}
     S::Vector{Vector{Float64}}
     Y::Vector{Vector{Float64}}
+    gamma_k::Vector{Float64}
     Bk::Vector{Matrix{Float64}}
     r_stop::Float64
 end
@@ -860,9 +854,6 @@ function MOI.eval_constraint_jacobian(d::MixedTSIEvaluator, J, x)
 
     # Store gradient history for SR1
     push!(d.g_hist_temp, copy(grad_full))
-    # if length(d.g_hist) > 2
-    #     popfirst!(d.g_hist)
-    # end
 
     # Fill TSI row (dense ordering matches jacobian_structure)
     offset = ns
@@ -885,8 +876,6 @@ function MOI.hessian_lagrangian_structure(d::MixedTSIEvaluator)
     return H
 end
 
-# TODO: Remove the zero Hessian
-
 # ---------------------------------------------------------
 # Hessian values
 #
@@ -896,6 +885,9 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
     fill!(Hval, 0.0)
 
     ns = length(d.hess_sym_struct)
+
+    σ = 1.0
+    μ = ones(d.m_sym + 1)
 
     # symbolic part uses μ[1:m_sym]
     MOI.eval_hessian_lagrangian(
@@ -907,10 +899,6 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
     )
 
     μ_tsi = μ[d.m_sym + 1]
-
-    # println("μ length = ", length(μ))
-    # println("m_sym = ", d.m_sym)
-    # println("μ_tsi = ", μ[d.m_sym + 1])
 
     # local state [pg; qg]
     if d.Surrogate["model_type"] == "CNF"
@@ -931,22 +919,41 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
         s = d.x_hist[2] - d.x_hist[1]
         y = d.g_hist[2] - d.g_hist[1]
 
+        # gamma_k = dot(s, y)/dot(s,s)
+        gamma_k = dot(y, y)/dot(s,y)
+        push!(d.gamma_k, gamma_k)
+
+        # println("d.x_hist[2]:", d.x_hist[2])
+        # println("d.g_hist[2]:", d.g_hist[2])
+        # println("s:", s)
+        # println("y:", y)
+
         popfirst!(d.x_hist)
         popfirst!(d.g_hist)
 
-        push!(d.S, copy(s))
-        push!(d.Y, copy(y))
+        push!(d.S, s)
+        push!(d.Y, y)
 
         yBs = y - d.Bk[1]*s
+        # B = TSI_g_bb_hess_values(
+        #         d.st_args,
+        #         d.Bk[1],
+        #         d.S[end],
+        #         d.Y[end],
+        #         d.approx_type,
+        #     )
+        println(abs(dot(s, yBs)), " , ", d.r_stop * norm(s) * norm(yBs), ", ", norm(s), ", ", norm(yBs)  )
+        # push!(d.Bk, B)
+        # popfirst!(d.Bk)
         if abs(dot(s, yBs)) >= d.r_stop * norm(s) * norm(yBs) 
             B = TSI_g_bb_hess_values(
                 d.st_args,
-                d.B0,
+                d.gamma_k[end] * d.I_gamma,
                 d.S,
                 d.Y,
-                d.approx_type,
+                "Limited",
             )
-            println(abs(dot(s, yBs)), " , ", d.r_stop * norm(s) * norm(yBs) )
+            println(abs(dot(s, yBs)), " , ", d.r_stop * norm(s) * norm(yBs), ", ", norm(s), ", ", norm(yBs)  )
             push!(d.Bk, B)
             popfirst!(d.Bk)
         else
@@ -954,17 +961,22 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
             println("SR1 was skipped")
         end
 
+        # for i in 1:length(d.Y)
+        #     println(
+        #         " S info: ", minimum(d.S[i]), ", ", maximum(d.S[i]), ", ", minimum(abs.(d.S[i])), ", ", maximum(abs.(d.S[i])),
+        #     )
+        # end
+
+        # for i in 1:length(d.Y)
+        #     println(            
+        #         " Y info: ", minimum(d.Y[i]), ", ", maximum(d.Y[i]), ", ", minimum(abs.(d.Y[i])), ", ", maximum(abs.(d.Y[i])),
+        #     )
+        # end
+
         if length(d.S) > d.LMp
             popfirst!(d.S)
             popfirst!(d.Y)
         end
-
-        println(
-            " S info: ", minimum(s), ", ", maximum(s), ", ", minimum(abs.(s)), ", ", maximum(abs.(s)),
-        )
-        println(            
-            " Y info: ", minimum(y), ", ", maximum(y), ", ", minimum(abs.(y)), ", ", maximum(abs.(y)),
-        )
     end
 
     # B = TSI_g_bb_hess_values(
@@ -980,19 +992,20 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
 
     offset = ns
     for k in eachindex(vals)
-        # Hval[offset + k] = μ_tsi * vals[k] * 0.
         Hval[offset + k] = μ_tsi * vals[k] 
     end
 
-    for k in 1:min(20, length(vals))
-        println(
-            "k=", k,
-            " local=(", d.bb_rows_local[k], ",", d.bb_cols_local[k], ")",
-            " global=(", d.bb_rows[k], ",", d.bb_cols[k], ")",
-            " val=", B[d.bb_rows_local[k], d.bb_cols_local[k]],
-            " stored_index=", offset + k
-        )
-    end
+    println("Max_val: ", maximum(vals))
+
+    # for k in 1:min(20, length(vals))
+    #     println(
+    #         "k=", k,
+    #         " local=(", d.bb_rows_local[k], ",", d.bb_cols_local[k], ")",
+    #         " global=(", d.bb_rows[k], ",", d.bb_cols[k], ")",
+    #         " val=", B[d.bb_rows_local[k], d.bb_cols_local[k]],
+    #         " stored_index=", offset + k
+    #     )
+    # end
     return
 end
 
@@ -1076,6 +1089,60 @@ function print_mixed_problem_summary(dest)
 
 end
 
+function dump_full_hessian(d::MixedTSIEvaluator, x)
+
+    println("\n==== Dumping full Hessian (before solve) ====")
+
+    n = d.n
+
+    # Hessian structure
+    Hstruct = MOI.hessian_lagrangian_structure(d)
+    nnz = length(Hstruct)
+
+    # Allocate values
+    Hval = zeros(nnz)
+
+    # Use σ=1, μ=ones (or customize)
+    σ = 1.0
+    μ = ones(d.m_sym + 1)
+
+    # Evaluate Hessian
+    MOI.eval_hessian_lagrangian(d, Hval, x, σ, μ)
+
+    # Reconstruct full matrix
+    H = zeros(n, n)
+
+    for k in eachindex(Hval)
+        row, col = Hstruct[k]
+
+        H[row, col] += Hval[k]
+        if row == d.bb_rows[1] && col == d.bb_rows[1]
+            print("Happy Friday")
+        end
+        if row != col
+            H[col, row] += Hval[k]  # symmetry
+        end
+    end
+
+    println("Hessian size: ", size(H))
+
+    # Print small subset (avoid explosion)
+    # println("\nTop-left 10x10 block:")
+    # println(H[1:10, 1:10])
+    # println("\nChecking TSI block entries:\n")
+
+    # println(H[d.bb_rows[1]:d.bb_rows[5], d.bb_rows[1]:d.bb_rows[5]])
+
+    for k in 1:min(55, length(d.bb_rows))
+        r = d.bb_rows[k]
+        c = d.bb_cols[k]
+
+        # println("H[$r,$c] = ", H[r,c])
+    end
+
+    return H
+end
+
 # ---------------------------------------------------------
 # Build MOI/Ipopt solver from JuMP model and REPLACE the
 # existing nonlinear block with a mixed evaluator:
@@ -1104,6 +1171,8 @@ function build_moi_solver_with_TSI_mixed!(
     # 1) Copy JuMP backend into destination optimizer
     # -----------------------------------------------------
     index_map = MOI.copy_to(opt, src_backend)
+
+    # println("index_map: ", index_map)
 
     old_opt_block =
         try
@@ -1144,6 +1213,15 @@ function build_moi_solver_with_TSI_mixed!(
     hess_sym_struct = MOI.hessian_lagrangian_structure(sym_eval)
     m_sym = length(bounds_sym)
 
+    # println(hess_sym_struct)
+    max_val = 0
+    for k in eachindex(hess_sym_struct)
+        row = hess_sym_struct[k][1]
+        col = hess_sym_struct[k][2]
+        max_val = max(max_val,max(row, col))
+    end
+    println("Max_val:", max_val)
+
     println("symbolic Jacobian nnz = ", length(jac_sym_struct))
     println("symbolic Hessian nnz = ", length(hess_sym_struct))
 
@@ -1159,11 +1237,17 @@ function build_moi_solver_with_TSI_mixed!(
     p_dest = [index_map[vi].value for vi in p_src]
     q_dest = [index_map[vi].value for vi in q_src]
 
-    # println(p_dest)
-    # println(q_dest)
+    # vars = [:p_g, :v_n, :theta_n, :p_li, :q_li, :p_ti, :q_ti, :b_s, :q_g, :c_g, :pslackm_n, :pslackp_n, :qslackm_n, :qslackp_n, :sslack_li, :sslack_ti]
+
+    # for l in vars
+    #     var_src = JuMP.index.(m[l])
+    #     var_dest = [index_map[vi].value for vi in var_src]
+    #     println(l,": ", var_dest)
+    # end 
 
     n = MOI.get(opt, MOI.NumberOfVariables())
     N_gen = st_args["numb_active_gen"]
+    println("Number of active generators: ", N_gen)
 
     # -----------------------------------------------------
     # 5) Fix TSI sparsity pattern once
@@ -1175,10 +1259,15 @@ function build_moi_solver_with_TSI_mixed!(
     bb_grad_cols = vcat(p_dest, q_dest)
     bb_grad_offset = length(jac_sym_struct) + 1
 
+    gamma_k = Vector{Float64}()
+    push!(gamma_k, gamma)
+
+    I_gamma = sparse(1.0I, 2 * N_gen, 2 * N_gen)
+
     B0 =
         gamma == 0.0 ?
         spzeros(2 * N_gen, 2 * N_gen) :
-        gamma * sparse(I, 2 * N_gen, 2 * N_gen)
+        gamma * sparse(I, 2 * N_gen, 2 * N_gen)  
 
     x_hist = Vector{Vector{Float64}}()
     g_hist = Vector{Vector{Float64}}()
@@ -1230,6 +1319,7 @@ function build_moi_solver_with_TSI_mixed!(
 
     println("Length of top_indices for Hessian: $(length(top))")
     println("top_indices for Hessian: $(sort(top) .+ 1)")
+    println("top_indices for Hessian: $p_dest[sort(top) .+ 1)")
 
     st_args["top_idx"] = top
 
@@ -1285,14 +1375,29 @@ function build_moi_solver_with_TSI_mixed!(
         approx_type,
         r,
         B0,
+        I_gamma,
         Vector{Vector{Float64}}(),
         Vector{Vector{Float64}}(),
         Vector{Vector{Float64}}(),
         Vector{Vector{Float64}}(),
         Vector{Vector{Float64}}(),
+        gamma_k,
         Bk,
         1e-4
     )
+
+    # -----------------------------------------------------
+    # DEBUG: evaluate Hessian BEFORE solver
+    # -----------------------------------------------------
+
+    x_test = zeros(n)
+
+    # put initial point into solver ordering
+    for (i, idx) in enumerate(vcat(p_dest, q_dest))
+        x_test[idx] = vcat(x0[:p_g], x0[:q_g])[i]
+    end
+
+    # H = dump_full_hessian(mixed_eval, x_test)
 
     # -----------------------------------------------------
     # 7) Attach combined NLP block
@@ -1370,7 +1475,7 @@ function TSACOPF_sparse_Limited_Memory_SR1(
     x0 = get_primal_starting_point(psd)
 
     # Build JuMP ACOPF model
-    m, model_data = create_basecase_model_TSI(psd, x0)
+    m, model_data = create_basecase_model(psd, nothing, x0)
 
     # Attach mixed NLP block
     index_map, src_backend = build_moi_solver_with_TSI_mixed!(

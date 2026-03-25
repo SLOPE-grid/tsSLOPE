@@ -24,6 +24,10 @@ def SR1_approx_Full(Bk, yk, sk, tol=1e-8):
     denom = np.inner(v, sk)
 
     if abs(denom) > tol * np.linalg.norm(v) * np.linalg.norm(sk):
+        print(f"{abs(denom)}, {np.linalg.norm(v)}, {np.linalg.norm(sk)}")
+        print(f"Max value for Bk: {np.max(Bk)}")
+        print(f"Max value for update: {np.max(np.outer(v, v))}")
+        print(f"Demon: {denom}")
         Bk = Bk + np.outer(v, v) / denom
 
     return Bk
@@ -73,6 +77,7 @@ def find_sparse_pattern(B0, y, s):
     # Select rows with largest 2-norm
     row_norms_sq = np.sum(U**2, axis=1)
     top_idx = np.argpartition(row_norms_sq, -Mel)[-Mel:]
+    top_idx = np.array(range(len(N[:,0])))
 
     # Re-orthonormalize selected rows
     U_sub = U[top_idx, :]
@@ -85,13 +90,13 @@ def find_sparse_pattern(B0, y, s):
     # Sparse low-rank SR1 update
     B_til = B0 + Q_til @ np.diag(w) @ Q_til.T
 
+    print(f"Max value for B: {np.max(B_til)}")
+
     rows, cols = np.nonzero(B_til)
 
     mask = rows >= cols
     rows = rows[mask]
     cols = cols[mask]
-
-    # vals = B_til[rows, cols]
 
     return rows + 1, cols + 1, top_idx
 
@@ -144,8 +149,9 @@ def hess_approx(B, S, Y, approx_type="Sparse", top_indices = []):
         if len(S) == 0:
             return B
         else:
-            return SR1_spar_Sparse(B, S, Y, top_indices)
-            # return SR1_approx_Limited(B, S, Y)
+            # return SR1_spar_Sparse(B, S, Y, top_indices)
+            return SR1_approx_Limited(B, S, Y)
+            # return SR1_approx_Full(B, S, Y)
 
     elif approx_type == "Sparse_pattern":
             return find_sparse_pattern(B, S, Y)

@@ -30,7 +30,7 @@ save_Hess = false
 
 active_gen_only = true
 
-# model_type = "CNF"
+model_type = "CNF"
 model_type = "CNN_Soft"
 # model_type = "None"
 
@@ -49,6 +49,7 @@ Hess_approx = true
 gamma = 100.
 gamma = 0.
 r = 6
+
 approx_type = "Sparse"
 # approx_type = "Limited"
 # approx_type = "Full"

@@ -13,7 +13,7 @@ include(string(jl_lib,"/load_case.jl"))
 
 const CACHE = Dict{UInt64, Any}()
 
-function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Union{Nothing, Bool} = false, save_Hess::Union{Nothing, Bool} = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, String} = nothing, Hess_approx::Union{Nothing, Bool} = false, gamma::Union{Nothing, Float64} = nothing, approx_type::Union{Nothing, String} = nothing, r::Union{Nothing, Int} = nothing)
+function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Union{Nothing, Bool} = false, save_Hess::Union{Nothing, Bool} = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, Float64} = nothing, Hess_approx::Union{Nothing, Bool} = false, gamma::Union{Nothing, Float64} = nothing, approx_type::Union{Nothing, String} = nothing, r::Union{Nothing, Int} = nothing)
 
     opt = optimizer_with_attributes(Ipopt.Optimizer,
                                     "sb" => "yes",
@@ -25,10 +25,12 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 
     # Case when there is no surrogate 
     if Surrogate["model_type"] == nothing
+        println("Solving basecase no surrogate. \n")
         return TSACOPF_No_Surrogate(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt)
 
     # Case when the true surrogate Hessian is used
     elseif Hess_approx == false
+        println("Solving basecase with surrogate true Hessian. \n")
         return TSACOPF_True_Surrogate_Hessian(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau, spect_info = spect_info, save_Hess = save_Hess, max_iter = max_iter, ev_nonzero_tol = ev_nonzero_tol)
 
     # Case when Hessian approximation was requested, but none was given
@@ -40,10 +42,12 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 
     # Case when full memory SR1 is used for the Hessian
     elseif approx_type == "Full"
+        println("Solving basecase with surrogate and full memory SR1. \n")
         return TSACOPF_Full_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type)
 
     # Case when limited memory SR1 is used for the Hessian
     elseif approx_type == "Limited"
+        println("Solving basecase with surrogate and limited memory SR1. \n")
         return TSACOPF_Limited_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, r = r)
 
     # Case when sparse limited memory SR1 is used for the Hessian
@@ -56,6 +60,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     end
 end
 
+# For debugging only
 function print_constraint_inventory(m::JuMP.Model)
     println("---- Constraint inventory ----")
     total = 0
@@ -78,6 +83,7 @@ function print_constraint_inventory(m::JuMP.Model)
     return
 end
 
+# For debugging only
 function print_ipopt_problem_summary(m::JuMP.Model)
 
     backend = JuMP.backend(m)
@@ -177,7 +183,7 @@ function TSACOPF_No_Surrogate(instance_dir::String, solution_dir::String, pf_lim
 
 end
 
-function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Float64 = 1e-10)
+function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, Float64} = 1e-10)
 	print("done.\nCreating index lists for TSI constraint ...")
 	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
 		
@@ -215,10 +221,16 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
     
             pg_vec = collect(args[1:N_gen])
             qg_vec = collect(args[N_gen+1:2*N_gen])
-            hsh = hash(pg_vec)
+
+            hsh = hash((pg_vec, qg_vec))
     
             if haskey(CACHE, hsh)
-                h =  CACHE[hsh]
+                h_cached = CACHE[hsh]
+                for i = 1:2*N_gen
+                    for j = 1:i
+                        h[i, j] = h_cached[i, j]
+                    end
+                end
                 return
             else
                 hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, pg_vec, qg_vec)
@@ -242,16 +254,18 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
 
                 for i = 1:2*N_gen
                     for j = 1:i
+                        # println("Hess[$i,$j]: ", hess[i,j])
                         h[i, j] = hess[i,j]
                     end
                 end
-                CACHE[hsh] = h
+                CACHE[hsh] = hess
             end     
         end
 
         register(m, :tsicon, 2*N_gen, tsif, tsig, tsih)
 
-        @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= tau )
+        @NLconstraint(m, tsicon( m[:p_g]..., m[:q_g]...) >= 0.5 )
+        println("Mixed MOI Not a happy thursday")
         
         if !ispath(solution_dir)
             mkpath(solution_dir)
@@ -337,10 +351,15 @@ function TSACOPF_Full_Memory_SR1(instance_dir::String, solution_dir::String, pf_
 
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
-        hsh = hash(pg_vec)
+        hsh = hash((pg_vec, qg_vec))
 
         if haskey(CACHE, hsh)
-            h =  CACHE[hsh]
+            h_cached = CACHE[hsh]
+            for i = 1:2*N_gen
+                for j = 1:i
+                    h[i, j] = h_cached[i, j]
+                end
+            end
             return
         else
             grad = grad_temp[end]
@@ -374,7 +393,7 @@ function TSACOPF_Full_Memory_SR1(instance_dir::String, solution_dir::String, pf_
                     h[i, j] = hess[i,j]
                 end
             end
-            CACHE[hsh] = h
+            CACHE[hsh] = hess
         end     
     end
 
@@ -408,6 +427,8 @@ end
 function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; max_iter::Int = 200, gamma::Float64 = 0., approx_type::String = "Sparse", r::Int = 6)
 	print("done.\nCreating index lists for TSI constraint ...")
 	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
+
+    println("Using limited SR1")
 		                  
     # get primal starting point
     x0 = get_primal_starting_point(psd)
@@ -453,10 +474,15 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
-        hsh = hash(pg_vec)
+        hsh = hash((pg_vec, qg_vec))
 
         if haskey(CACHE, hsh)
-            h =  CACHE[hsh]
+            h_cached = CACHE[hsh]
+            for i = 1:2*N_gen
+                for j = 1:i
+                    h[i, j] = h_cached[i, j]
+                end
+            end
             return
         else
             grad = grad_temp[end]
@@ -485,31 +511,18 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
                     popfirst!(S)
                     popfirst!(Y)
                 end
-
-                # println(
-                #     " S info: ", minimum(S[end]), ", ", maximum(S[end]), ", ", minimum(abs.(S[end])), ", ", maximum(abs.(S[end])),
-                # )
-                # println(            
-                #     " Y info: ", minimum(Y[end]), ", ", maximum(Y[end]), ", ", minimum(abs.(Y[end])), ", ", maximum(abs.(Y[end])),
-                # )
-
             end
-
-            # println(hess)
 
             max_val = 0
             for i = 1:2*N_gen
                 for j = 1:i
-                    # if i <= 5
-                    # println("Hess[$i,$j]: ", hess[i,j])
-                    # end
                     h[i, j] += hess[i,j]
                     val = hess[i,j]
                     max_val = max(max_val, val)
                 end
             end
             println("Max_val: ", max_val)
-            CACHE[hsh] = h
+            CACHE[hsh] = hess
         end     
     end
 
@@ -522,14 +535,7 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
     end
 
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="output")
-
-    # for i = 1:r
-    #     println("S[$i]: max=", maximum(S[i]), 
-    #             " min=", minimum(S[i]))
-    #     println("Y[$i]: max=", maximum(Y[i]), 
-    #             " min=", minimum(Y[i]))
-    # end
-    
+   
     total_time = MOI.get(m, MOI.SolveTimeSec())
 
     termination_status = MOI.get(m, MOI.TerminationStatus())
@@ -598,6 +604,7 @@ function build_symbolic_nlp_and_bounds(model::JuMP.Model)
     return nlp, bounds, has_nl_obj
 end
 
+# Only used for debugging
 function print_nlp_debug_info(m::JuMP.Model)
     println("---- JuMP nonlinear debug info ----")
     try
@@ -639,7 +646,7 @@ function TSI_g_bb(
 )
     pg = x[p_idx]
     qg = x[q_idx]
-    return TSIConstraint(psd, Surrogate, st_args, pg, qg)
+    return TSIConstraint(psd, Surrogate, st_args, pg, qg) - 0.5
 end
 
 # ---------------------------------------------------------
@@ -871,8 +878,12 @@ end
 # ---------------------------------------------------------
 function MOI.hessian_lagrangian_structure(d::MixedTSIEvaluator)
     H = Vector{Tuple{Int,Int}}()
+    # println("Checking lenths")
+    # println(length(d.hess_sym_struct))
+    # println(length(d.bb_rows))
     append!(H, d.hess_sym_struct)
     append!(H, collect(zip(d.bb_rows, d.bb_cols)))
+    # println(length(H))
     return H
 end
 
@@ -935,31 +946,35 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
         push!(d.Y, y)
 
         yBs = y - d.Bk[1]*s
-        # B = TSI_g_bb_hess_values(
-        #         d.st_args,
-        #         d.Bk[1],
-        #         d.S[end],
-        #         d.Y[end],
-        #         d.approx_type,
-        #     )
+        # # Uncomment to run full memory SR1
+        B = TSI_g_bb_hess_values(
+                d.st_args,
+                d.Bk[1],
+                d.S[end],
+                d.Y[end],
+                d.approx_type,
+            )
         println(abs(dot(s, yBs)), " , ", d.r_stop * norm(s) * norm(yBs), ", ", norm(s), ", ", norm(yBs)  )
         # push!(d.Bk, B)
         # popfirst!(d.Bk)
-        if abs(dot(s, yBs)) >= d.r_stop * norm(s) * norm(yBs) 
-            B = TSI_g_bb_hess_values(
-                d.st_args,
-                d.gamma_k[end] * d.I_gamma,
-                d.S,
-                d.Y,
-                "Limited",
-            )
-            println(abs(dot(s, yBs)), " , ", d.r_stop * norm(s) * norm(yBs), ", ", norm(s), ", ", norm(yBs)  )
-            push!(d.Bk, B)
-            popfirst!(d.Bk)
-        else
-            B = d.Bk[1]
-            println("SR1 was skipped")
-        end
+        # if abs(dot(s, yBs)) >= d.r_stop * norm(s) * norm(yBs) 
+        #     # # For debugging choose the SR1 method
+        #     # SR1_type = "Sparse"
+        #     SR1_type = "Limited"
+        #     B = TSI_g_bb_hess_values(
+        #         d.st_args,
+        #         d.gamma_k[end] * d.I_gamma,
+        #         d.S,
+        #         d.Y,
+        #         SR1_type,
+        #     )
+        #     println(abs(dot(s, yBs)), " , ", d.r_stop * norm(s) * norm(yBs), ", ", norm(s), ", ", norm(yBs)  )
+        #     push!(d.Bk, B)
+        #     popfirst!(d.Bk)
+        # else
+        #     B = d.Bk[1]
+        #     println("SR1 was skipped")
+        # end
 
         # for i in 1:length(d.Y)
         #     println(
@@ -979,14 +994,15 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
         end
     end
 
-    # B = TSI_g_bb_hess_values(
-    #     x,
-    #     d.p_idx,
-    #     d.q_idx,
-    #     d.psd,
-    #     d.Surrogate,
-    #     d.st_args
-    # )
+    # # uncomment to run the true Hessian
+    B = TSI_g_bb_hess_values(
+        x,
+        d.p_idx,
+        d.q_idx,
+        d.psd,
+        d.Surrogate,
+        d.st_args
+    )
 
     vals = [B[i,j] for (i,j) in zip(d.bb_rows_local, d.bb_cols_local)]
 
@@ -1009,6 +1025,7 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
     return
 end
 
+# ONly used for debugging
 function print_mixed_problem_summary(dest)
 
     println("\n---- Mixed solver problem summary ----")
@@ -1089,6 +1106,7 @@ function print_mixed_problem_summary(dest)
 
 end
 
+# Only used for debugging
 function dump_full_hessian(d::MixedTSIEvaluator, x)
 
     println("\n==== Dumping full Hessian (before solve) ====")
@@ -1403,7 +1421,8 @@ function build_moi_solver_with_TSI_mixed!(
     # 7) Attach combined NLP block
     # -----------------------------------------------------
     new_bounds = copy(bounds_sym)
-    push!(new_bounds, MOI.NLPBoundsPair(tau, Inf))
+    push!(new_bounds, MOI.NLPBoundsPair(0.0, Inf))
+    println("Mixed MOI Not a happy thursday")
 
     new_nlp_block = MOI.NLPBlockData(
         new_bounds,

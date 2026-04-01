@@ -46,7 +46,6 @@ t0 = time()
 
 Hess_approx = true
 
-gamma = -100.
 gamma = 0.
 r = 6
 gamma_update = true

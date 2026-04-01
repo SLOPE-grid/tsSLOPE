@@ -1,6 +1,6 @@
 import numpy as np
 
-def make_L_D_S_Y(y, s):
+def make_L_D_S_Y(s, y):
     k = len(s)
     S = np.column_stack(s[:k])
     Y = np.column_stack(y[:k])
@@ -17,7 +17,7 @@ def make_L_D_S_Y(y, s):
 
     return L, D, S, Y
 
-def SR1_approx_Full(Bk, yk, sk, tol=1e-8):
+def SR1_approx_Full(Bk, sk, yk, tol=1e-8):
 
     v = yk - Bk @ sk
     denom = np.inner(v, sk)
@@ -27,9 +27,9 @@ def SR1_approx_Full(Bk, yk, sk, tol=1e-8):
 
     return Bk
     
-def SR1_approx_Limited(B0, y, s):
+def SR1_approx_Limited(B0, s, y):
     
-    L, D, S, Y = make_L_D_S_Y(y, s)
+    L, D, S, Y = make_L_D_S_Y(s, y)
     # Compact SR1 form:  B = B0 + N M^{-1} N^T
     N = Y - B0 @ S
     M = D + L + L.T - S.T @ B0 @ S
@@ -38,12 +38,12 @@ def SR1_approx_Limited(B0, y, s):
 
     return B
 
-def find_sparse_pattern(B0, y, s, n = 10):
+def find_sparse_pattern(B0, s, y, n = 10):
     """
     Sparse block SR1 Hessian approximation.
     """
 
-    L, D, S, Y = make_L_D_S_Y(y, s)
+    L, D, S, Y = make_L_D_S_Y(s, y)
 
     # Compact SR1 form:  B = B0 + N M^{-1} N^T
     N = Y - B0 @ S
@@ -86,14 +86,14 @@ def find_sparse_pattern(B0, y, s, n = 10):
 
     return rows + 1, cols + 1, top_idx
 
-def SR1_spar_Sparse(B0, y, s, top_idx):
+def SR1_spar_Sparse(B0, s, y, top_idx):
     """
     Sparse block SR1 Hessian approximation.
     Mel is currently set to sqrt(10 n) but will later be
     exposed as a tunable sparsity parameter.
     """
 
-    L, D, S, Y = make_L_D_S_Y(y, s)
+    L, D, S, Y = make_L_D_S_Y(s, y)
 
     # Compact SR1 form:  B = B0 + N M^{-1} N^T
     N = Y - B0 @ S
@@ -126,23 +126,23 @@ def SR1_spar_Sparse(B0, y, s, top_idx):
 def hess_approx(B, S, Y, approx_type="Sparse", top_indices = []):
 
     if approx_type == "Full":
-        return SR1_approx_Full(B, Y, S)
+        return SR1_approx_Full(B, S, Y)
 
     elif approx_type == "Limited":
-        return SR1_approx_Limited(B, Y, S)
+        return SR1_approx_Limited(B, S, Y)
 
     elif approx_type == "Sparse":
         if len(S) == 0:
             return B
         else:
-            return SR1_spar_Sparse(B, Y, S, top_indices)
+            return SR1_spar_Sparse(B, S, Y, top_indices)
 
     elif approx_type == "Sparse_pattern":
-            return find_sparse_pattern(B, Y, S)
+            return find_sparse_pattern(B, S, Y)
 
     else:
         if len(S) == 0:
             return B
         else:
-            return SR1_spar_Sparse(B, Y, S)
+            return SR1_spar_Sparse(B, S, Y)
 

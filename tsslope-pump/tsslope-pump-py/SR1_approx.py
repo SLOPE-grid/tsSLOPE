@@ -1,6 +1,6 @@
 import numpy as np
 
-def make_L_D_S_Y(s, y):
+def make_L_D_S_Y(y, s):
     k = len(s)
     S = np.column_stack(s[:k])
     Y = np.column_stack(y[:k])
@@ -17,44 +17,33 @@ def make_L_D_S_Y(s, y):
 
     return L, D, S, Y
 
-
 def SR1_approx_Full(Bk, yk, sk, tol=1e-8):
 
     v = yk - Bk @ sk
     denom = np.inner(v, sk)
 
     if abs(denom) > tol * np.linalg.norm(v) * np.linalg.norm(sk):
-        print(f"{abs(denom)}, {np.linalg.norm(v)}, {np.linalg.norm(sk)}")
-        print(f"Max value for Bk: {np.max(Bk)}")
-        print(f"Max value for update: {np.max(np.outer(v, v))}")
-        print(f"Demon: {denom}")
         Bk = Bk + np.outer(v, v) / denom
 
     return Bk
     
 def SR1_approx_Limited(B0, y, s):
     
-    if len(s) == 1:
-        B = np.outer((y[0] - B0@s[0]), (y[0] - B0@s[0]) )/ ( np.inner(y[0], s[0]) - np.inner(B0 @ s[0], s[0]) ) 
-    else:
-        L, D, S, Y = make_L_D_S_Y(s, y)
-        # Compact SR1 form:  B = B0 + N M^{-1} N^T
-        N = Y - B0 @ S
-        M = D + L + L.T - S.T @ B0 @ S
-        Z = np.linalg.solve(M, N.T)
-        B = B0 + N @ Z
+    L, D, S, Y = make_L_D_S_Y(y, s)
+    # Compact SR1 form:  B = B0 + N M^{-1} N^T
+    N = Y - B0 @ S
+    M = D + L + L.T - S.T @ B0 @ S
+    Z = np.linalg.solve(M, N.T)
+    B = B0 + N @ Z
 
     return B
 
-def find_sparse_pattern(B0, y, s):
+def find_sparse_pattern(B0, y, s, n = 10):
     """
     Sparse block SR1 Hessian approximation.
-    Mel is currently set to sqrt(10 n) but will later be
-    exposed as a tunable sparsity parameter.
     """
-    n = 10
 
-    L, D, S, Y = make_L_D_S_Y(s, y)
+    L, D, S, Y = make_L_D_S_Y(y, s)
 
     # Compact SR1 form:  B = B0 + N M^{-1} N^T
     N = Y - B0 @ S
@@ -77,7 +66,6 @@ def find_sparse_pattern(B0, y, s):
     # Select rows with largest 2-norm
     row_norms_sq = np.sum(U**2, axis=1)
     top_idx = np.argpartition(row_norms_sq, -Mel)[-Mel:]
-    top_idx = np.array(range(len(N[:,0])))
 
     # Re-orthonormalize selected rows
     U_sub = U[top_idx, :]
@@ -89,8 +77,6 @@ def find_sparse_pattern(B0, y, s):
 
     # Sparse low-rank SR1 update
     B_til = B0 + Q_til @ np.diag(w) @ Q_til.T
-
-    print(f"Max value for B: {np.max(B_til)}")
 
     rows, cols = np.nonzero(B_til)
 
@@ -107,7 +93,7 @@ def SR1_spar_Sparse(B0, y, s, top_idx):
     exposed as a tunable sparsity parameter.
     """
 
-    L, D, S, Y = make_L_D_S_Y(s, y)
+    L, D, S, Y = make_L_D_S_Y(y, s)
 
     # Compact SR1 form:  B = B0 + N M^{-1} N^T
     N = Y - B0 @ S
@@ -143,22 +129,20 @@ def hess_approx(B, S, Y, approx_type="Sparse", top_indices = []):
         return SR1_approx_Full(B, Y, S)
 
     elif approx_type == "Limited":
-        return SR1_approx_Limited(B, S, Y)
+        return SR1_approx_Limited(B, Y, S)
 
     elif approx_type == "Sparse":
         if len(S) == 0:
             return B
         else:
-            # return SR1_spar_Sparse(B, S, Y, top_indices)
-            return SR1_approx_Limited(B, S, Y)
-            # return SR1_approx_Full(B, S, Y)
+            return SR1_spar_Sparse(B, Y, S, top_indices)
 
     elif approx_type == "Sparse_pattern":
-            return find_sparse_pattern(B, S, Y)
+            return find_sparse_pattern(B, Y, S)
 
     else:
         if len(S) == 0:
             return B
         else:
-            return SR1_spar_Sparse(B, S, Y)
+            return SR1_spar_Sparse(B, Y, S)
 

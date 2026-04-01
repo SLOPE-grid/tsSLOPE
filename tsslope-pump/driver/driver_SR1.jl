@@ -46,9 +46,10 @@ t0 = time()
 
 Hess_approx = true
 
-gamma = 100.
+gamma = -100.
 gamma = 0.
 r = 6
+gamma_update = true
 
 approx_type = "Sparse"
 # approx_type = "Limited"
@@ -77,7 +78,8 @@ Surr_Feasibility_margin, termination_status, norm_grad, pg, hess_analy =
         Hess_approx = Hess_approx,
         gamma = gamma,
         approx_type = approx_type,
-        r = r
+        r = r,
+        gamma_update = gamma_update
     )
 
 

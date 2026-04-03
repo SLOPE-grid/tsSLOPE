@@ -71,8 +71,8 @@ function TSACOPF_No_Surrogate(instance_dir::String, solution_dir::String, pf_lim
 
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
-    
-    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="output")
+
+    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir=solution_dir)
 
     hess_analy =  Dict{Int, Dict{String,Any}}()
     
@@ -178,7 +178,7 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
         end
     end
 
-    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="output")
+    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir=solution_dir)
     
     total_time = MOI.get(m, MOI.SolveTimeSec())
 
@@ -311,7 +311,7 @@ function TSACOPF_Full_Memory_SR1(instance_dir::String, solution_dir::String, pf_
         mkpath(solution_dir)
     end
 
-    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="output")
+    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir=solution_dir)
     
     total_time = MOI.get(m, MOI.SolveTimeSec())
 
@@ -445,8 +445,8 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
         mkpath(solution_dir)
     end
 
-    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir="output")
-   
+    solution, m = solve_basecase_from_model(m, psd, model_data, output_dir=solution_dir)
+    
     total_time = MOI.get(m, MOI.SolveTimeSec())
 
     termination_status = MOI.get(m, MOI.TerminationStatus())

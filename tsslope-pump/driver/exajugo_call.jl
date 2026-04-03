@@ -13,7 +13,7 @@ include(string(jl_lib,"/load_case.jl"))
 
 const CACHE = Dict{UInt64, Any}()
 
-function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Union{Nothing, Bool} = false, save_Hess::Union{Nothing, Bool} = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, Float64} = nothing, Hess_approx::Union{Nothing, Bool} = false, gamma::Union{Nothing, Float64} = nothing, approx_type::Union{Nothing, String} = nothing, r::Union{Nothing, Int} = nothing, gamma_update::Union{Nothing, Bool} = nothing)
+function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Union{Nothing, Bool} = false, save_Hess::Union{Nothing, Bool} = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, Float64} = nothing, Hess_approx::Union{Nothing, Bool} = false, gamma::Union{Nothing, Float64} = 0., approx_type::Union{Nothing, String} = nothing, r::Union{Nothing, Int} = nothing, gamma_update::Union{Nothing, Bool} = nothing)
 
     opt = optimizer_with_attributes(Ipopt.Optimizer,
                                     "sb" => "yes",

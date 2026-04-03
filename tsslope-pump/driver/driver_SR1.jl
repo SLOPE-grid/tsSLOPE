@@ -48,6 +48,7 @@ Hess_approx = true
 
 gamma = 0.
 r = 6
+
 gamma_update = true
 
 approx_type = "Sparse"

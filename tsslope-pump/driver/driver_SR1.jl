@@ -20,9 +20,11 @@ function perturb_percent(x::AbstractVector; eps=0.01, rng=Random.GLOBAL_RNG)
     return x .* (1 .+ eps .* (2 .* rand(rng, length(x)) .- 1))
 end
 
+test_problem = case_path
+test_problem = Texas_case_path
 
-print("Reading instance from "*case_path*" ... ")
-psd = SCACOPFdata(case_path)
+print("Reading instance from "*test_problem*" ... ")
+psd = SCACOPFdata(test_problem)
 
 save_spect_info = false
 
@@ -32,9 +34,9 @@ active_gen_only = true
 
 model_type = "CNF"
 model_type = "CNN_Soft"
-# model_type = "None"
+model_type = "None"
 
-max_iter = 50
+max_iter = 200
 
 if model_type == "CNF"
     tau = 0.0
@@ -66,7 +68,7 @@ end
 num_iter, total_time, base_cost,
 Surr_Feasibility_margin, termination_status, norm_grad, pg, hess_analy =
     TSACOPF(
-        case_path,
+        test_problem,
         case_sol_path,
         pf_limit_file,
         surrogate,

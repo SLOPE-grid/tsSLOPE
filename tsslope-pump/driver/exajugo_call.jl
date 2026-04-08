@@ -411,14 +411,15 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 
                 if gamma_update
                     gamma_k = dot(y, y)/dot(s,y)
+                    B0_gamma = gamma_k * B0_eye
+                else
+                    B0_gamma = B0
                 end
 
                 push!(S, s)
                 push!(Y, y)
                 popfirst!(x)
                 popfirst!(g)
-
-                B0_gamma = gamma_k * B0_eye
 
                 hess = TSIConstraintHessApprox(st_args, B0_gamma, S, Y, approx_type)
 

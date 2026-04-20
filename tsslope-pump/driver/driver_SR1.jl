@@ -1,16 +1,20 @@
 include("load_config.jl")
-include("exajugo_call.jl") 
 
 using Pkg;
-using PyCall
 Pkg.activate((path_to_exajugo))
 push!(LOAD_PATH, string(path_to_exajugo, "/modules"))
 
+include("exajugo_call.jl") 
+
+using PyCall
 pushfirst!(pyimport("sys")."path", path_to_tsslope)
 tsslope_lib = pyimport("tsslope-pump-py")
 
 print("Reading instance from "*case_path*" ... ")
 psd = SCACOPFdata(case_path)
+
+jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
+include(string(jl_lib,"/tsi_constraints.jl"))
 
 test_problem = case_path
 # test_problem = Texas_case_path

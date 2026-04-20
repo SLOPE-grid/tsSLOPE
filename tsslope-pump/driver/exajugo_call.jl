@@ -770,8 +770,8 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
 
         gamma_k = d.gamma_k[end]
         if d.gamma_update
-            gamma_k = dot(y,y)/dot(s,y)
-            # gamma_k = dot(s,y)/dot(s,s)
+            # gamma_k = dot(y,y)/dot(s,y)
+            gamma_k = dot(s,y)/dot(s,s)
         end
         push!(d.gamma_k, gamma_k)
 
@@ -1209,5 +1209,5 @@ function TSACOPF_sparse_Limited_Memory_SR1(
            surr_margin,
            termination_status,
            norm_grad,
-           p_g_sol,
+           p_g_sol
 end

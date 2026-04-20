@@ -141,7 +141,7 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   return Float64.(hess)
 end
 
-function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse", Mel = nothing)
+function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse",   = nothing)
 
   # Call Python function via PyCall
   tsilib = ret_tsilib()

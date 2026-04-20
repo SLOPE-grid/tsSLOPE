@@ -29,7 +29,7 @@ function load_case(psd::SCACOPFdata, pf_file::String, case_type, gen_type::Union
     if case_type == "DSSP"
         return load_case_DSSP(psd, pf_file, gen_type)
     else
-        return load_case_general(psd, pf_file)
+        return load_case_general(psd, pf_file, gen_type)
     end
 end
 

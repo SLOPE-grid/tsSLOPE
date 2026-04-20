@@ -13,25 +13,25 @@ include(string(jl_lib,"/load_case.jl"))
 
 const CACHE = Dict{UInt64, Any}()
 
-function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Union{Nothing, Bool} = false, save_Hess::Union{Nothing, Bool} = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, Float64} = nothing, Hess_approx::Union{Nothing, Bool} = false, gamma::Union{Nothing, Float64} = 0., approx_type::Union{Nothing, String} = nothing, r::Union{Nothing, Int} = nothing, gamma_update::Union{Nothing, Bool} = nothing)
+function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, tau; spect_info::Union{Nothing, Bool} = false, save_Hess::Union{Nothing, Bool} = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, Float64} = nothing, Hess_approx::Union{Nothing, Bool} = false, gamma::Union{Nothing, Float64} = 0., approx_type::Union{Nothing, String} = nothing, r::Union{Nothing, Int} = nothing, gamma_update::Union{Nothing, Bool} = nothing, gen_type::Union{Nothing, String} = nothing, SR1_hist = nothing, Mel = nothing, diag_pattern = false)
 
     opt = optimizer_with_attributes(Ipopt.Optimizer,
                                     "sb" => "yes",
                                     # "linear_solver" => "ma57",
                                     "max_iter" =>  max_iter,
-                                    "print_timing_statistics" => "yes",
+                                    # "print_timing_statistics" => "yes",
                                     # "print_level" => 10,
                                     )
 
     # Case when there is no surrogate 
     if Surrogate["model_type"] == nothing
         println("Solving basecase no surrogate. \n")
-        return TSACOPF_No_Surrogate(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt)
+        return TSACOPF_No_Surrogate(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, gen_type)
 
     # Case when the true surrogate Hessian is used
     elseif Hess_approx == false
         println("Solving basecase with surrogate true Hessian. \n")
-        return TSACOPF_True_Surrogate_Hessian(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau, spect_info = spect_info, save_Hess = save_Hess, max_iter = max_iter, ev_nonzero_tol = ev_nonzero_tol)
+        return TSACOPF_True_Surrogate_Hessian(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; spect_info = spect_info, save_Hess = save_Hess, max_iter = max_iter, ev_nonzero_tol = ev_nonzero_tol, gen_type = gen_type)
 
     # Case when Hessian approximation was requested, but none was given
     elseif Hess_approx && isnothing(approx_type)
@@ -43,12 +43,12 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
     # Case when full memory SR1 is used for the Hessian
     elseif approx_type == "Full"
         println("Solving basecase with surrogate and full memory SR1. \n")
-        return TSACOPF_Full_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type)
+        return TSACOPF_Full_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, gen_type)
 
     # Case when limited memory SR1 is used for the Hessian
     elseif approx_type == "Limited"
         println("Solving basecase with surrogate and limited memory SR1. \n")
-        return TSACOPF_Limited_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, r = r, gamma_update = gamma_update)
+        return TSACOPF_Limited_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, r = r, gamma_update = gamma_update, gen_type = gen_type)
 
     # Case when sparse limited memory SR1 is used for the Hessian
     else
@@ -56,13 +56,13 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
         opt = MOI.instantiate(opt; with_bridge_type = Float64
                             )
 
-        return TSACOPF_sparse_Limited_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, r = r, gamma_update = gamma_update)
+        return TSACOPF_sparse_Limited_Memory_SR1(instance_dir, solution_dir, pf_limit_file, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, r = r, gamma_update = gamma_update, gen_type = gen_type, SR1_hist = SR1_hist, Mel = Mel, diag_pattern = diag_pattern)
     end
 end
 
-function TSACOPF_No_Surrogate(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt)
+function TSACOPF_No_Surrogate(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, gen_type::Union{Nothing, String} = nothing)
 	print("done.\nCreating index lists for TSI constraint ...")
-	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
+	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"], gen_type)
 		
 	print("done.\nSolving basecase using sparse OPF ...")
 
@@ -91,9 +91,9 @@ function TSACOPF_No_Surrogate(instance_dir::String, solution_dir::String, pf_lim
 
 end
 
-function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, Float64} = 1e-10)
+function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; spect_info::Bool = false, save_Hess::Bool = false, max_iter::Int = 200, ev_nonzero_tol::Union{Nothing, Float64} = 1e-10, gen_type::Union{Nothing, String} = nothing)
 	print("done.\nCreating index lists for TSI constraint ...")
-	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
+	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"], gen_type)
 		
 	print("done.\nSolving basecase using sparse OPF ...")
                   
@@ -103,8 +103,9 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
 
-    hess_analy =  Dict{Int, Dict{String,Any}}()
-
+    if spect_info
+        hess_analy =  Dict{Int, Dict{String,Any}}()
+    end
     # Used to store spectral data
     iter = 1
 
@@ -188,6 +189,7 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
     Surr_Feasibility_margin = TSIConstraint(psd, Surrogate, st_args, solution.p_g, solution.q_g) - tau
     grad = TSIConstraintPrime(psd, Surrogate, st_args, solution.p_g, solution.q_g)
     norm_grad = dot(grad, grad)
+
     if spect_info
         hess = TSIConstraintPrimePrime(psd, Surrogate, st_args, solution.p_g, solution.q_g)
         hess_analy_temp = h_analysis( hess;
@@ -202,17 +204,22 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
         hess_analy_temp["ql"]   = st_args["QL"]
 
         hess_analy[iter] = hess_analy_temp
+        
+        print("done. Objective value: \$", round(solution.base_cost, digits=1),
+            ".\nWriting solution to "*solution_dir*" ... \n")
+    
+        return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g, hess_analy
     end
         
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
 		".\nWriting solution to "*solution_dir*" ... \n")
 
-    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g, hess_analy
+    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g
 end
 
-function TSACOPF_Full_Memory_SR1(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type)
+function TSACOPF_Full_Memory_SR1(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; max_iter = max_iter, gamma = gamma, approx_type = approx_type, gen_type::Union{Nothing, String} = nothing)
 	print("done.\nCreating index lists for TSI constraint ...")
-	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
+	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"], gen_type)
 		
 	print("done.\nSolving basecase using sparse OPF ...")
                   
@@ -223,8 +230,6 @@ function TSACOPF_Full_Memory_SR1(instance_dir::String, solution_dir::String, pf_
     m, model_data = create_basecase_model(psd, opt, x0)
 
     iter = 1
-
-    hess_analy =  Dict{Int, Dict{String,Any}}()
 
     N_gen = st_args["numb_active_gen"]
 
@@ -326,13 +331,13 @@ function TSACOPF_Full_Memory_SR1(instance_dir::String, solution_dir::String, pf_
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
 		".\nWriting solution to "*solution_dir*" ... \n")
 
-    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g, hess_analy
+    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g
 
 end
 
-function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; max_iter::Int = 200, gamma::Float64 = 0., approx_type::String = "Sparse", r::Int = 6, gamma_update::Bool=true)
+function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, pf_limit_file::String, Surrogate, psd, opt, tau; max_iter::Int = 200, gamma::Float64 = 0., approx_type::String = "Sparse", r::Int = 6, gamma_update::Bool=true, gen_type::Union{Nothing, String} = nothing, save_SR1_hist = false)
 	print("done.\nCreating index lists for TSI constraint ...")
-	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
+	st_args = load_case(psd, pf_limit_file, Surrogate["model_type"], gen_type)
 
     println("Using limited SR1")
 		                  
@@ -342,10 +347,11 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
 
-    hess_analy =  Dict{Int, Dict{String,Any}}()
+    if save_SR1_hist
+        SR1_hist =  Dict{String, Vector{Vector{Float64}}}()
+    end
 
-    # Used to store spectral data
-    iter = 1
+    int_iter = true
 
     # limited memory parameter
     LMp = r   
@@ -357,6 +363,8 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
     B0     = gamma * B0_eye
     x = Vector{Vector{Float64}}()
     g = Vector{Vector{Float64}}()
+    x_storage = Vector{Vector{Float64}}()
+    g_storage = Vector{Vector{Float64}}()
     S = Vector{Vector{Float64}}()
     Y = Vector{Vector{Float64}}()
     grad_temp = Vector{Vector{Float64}}()
@@ -401,10 +409,14 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
             push!(x, x_temp)
             push!(g, grad)
 
-            if iter == 1
-                hess = B0
-                iter += 1
+            if save_SR1_hist
+                push!(x_storage, x_temp)
+                push!(g_storage, grad)
+            end
 
+            if int_iter
+                hess = B0
+                int_iter = false
             else
                 s = x[2] - x[1]
                 y = g[2] - g[1]
@@ -427,6 +439,10 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
                     popfirst!(S)
                     popfirst!(Y)
                 end
+                if length(x_storage) > LMp+1
+                    popfirst!(x_storage)
+                    popfirst!(g_storage)
+                end
             end
 
             for i = 1:2*N_gen
@@ -448,6 +464,11 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir=solution_dir)
     
+    if save_SR1_hist
+        SR1_hist["x"] = x_storage
+        SR1_hist["grad"] = g_storage
+    end
+
     total_time = MOI.get(m, MOI.SolveTimeSec())
 
     termination_status = MOI.get(m, MOI.TerminationStatus())
@@ -460,8 +481,11 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 	print("done. Objective value: \$", round(solution.base_cost, digits=1),
 		".\nWriting solution to "*solution_dir*" ... \n")
 
-    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g, hess_analy
+    if save_SR1_hist
+        return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g, SR1_hist
+    end
 
+    return num_iter, total_time, solution.base_cost, Surr_Feasibility_margin, termination_status, norm_grad, solution.p_g
 end
 
 
@@ -747,6 +771,7 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
         gamma_k = d.gamma_k[end]
         if d.gamma_update
             gamma_k = dot(y,y)/dot(s,y)
+            # gamma_k = dot(s,y)/dot(s,s)
         end
         push!(d.gamma_k, gamma_k)
 
@@ -756,21 +781,29 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
         push!(d.S, s)
         push!(d.Y, y)
 
-        # SR1 safeguard condition
-        yBs = y - d.Bk[1] * s
-        if abs(dot(s, yBs)) >= d.r_stop * norm(s) * norm(yBs)
-            B = TSI_g_bb_hess_values(
-                d.st_args,
-                d.gamma_k[end] * d.I_gamma,
-                d.S,
-                d.Y,
-                "Sparse",
-            )
-            push!(d.Bk, B)
-            popfirst!(d.Bk)
+        if d.st_args["top_idx"] == 0 
+
+            println("gamma_k = $gamma_k \n")
+    
+            B = d.gamma_k[end] * d.I_gamma
+
         else
-            B = d.Bk[1]
-            println("SR1 was skipped")
+            # SR1 safeguard condition
+            yBs = y - d.Bk[1] * s
+            if abs(dot(s, yBs)) >= d.r_stop * norm(s) * norm(yBs)
+                B = TSI_g_bb_hess_values(
+                    d.st_args,
+                    d.gamma_k[end] * d.I_gamma,
+                    d.S,
+                    d.Y,
+                    "Sparse",
+                )
+                push!(d.Bk, B)
+                popfirst!(d.Bk)
+            else
+                B = d.Bk[end]
+                println("SR1 was skipped")
+            end
         end
 
         if length(d.S) > d.LMp
@@ -809,6 +842,9 @@ function build_moi_solver_with_TSI_mixed!(
     approx_type::String = "Sparse",
     r::Int = 6,
     gamma_update::Bool = true,
+    SR1_hist = nothing,
+    Mel = nothing,
+    diag_pattern = false
 )
     src_backend = JuMP.backend(m)
 
@@ -892,53 +928,85 @@ function build_moi_solver_with_TSI_mixed!(
     S = Vector{Vector{Float64}}()
     Y = Vector{Vector{Float64}}()
 
-    # SR1 to choose sparse pattern for Hessian
-    for i in 1:(r + 1)
-        x_temp = zeros(2 * N_gen)
+    if diag_pattern 
 
-        pg_noise = pg + rand(Uniform(-1e-4, 1e-4), length(pg))
-        x_temp[1:N_gen] .= pg_noise
-
-        qg_noise = zeros(length(qg))
         if Surrogate["model_type"] == "CNF"
-            qg_noise = qg + rand(Uniform(-1e-4, 1e-4), length(qg))
-            x_temp[N_gen+1:2*N_gen] .= qg_noise
+            diag_n = 2 * N_gen
+            
         else
-            qg_noise .= qg
+            diag_n = N_gen
         end
 
-        grad = TSIConstraintPrime(
-            psd,
-            Surrogate,
+        top = 0
+
+        I_n = Matrix{Float64}(I, diag_n, diag_n)
+
+        rows_local, cols_local, vals = findnz(sparse(I_n))
+    else
+        # SR1 to choose sparse pattern for Hessian
+        if SR1_hist == nothing
+            for i in 1:(r + 1)
+                x_temp = zeros(2 * N_gen)
+
+                pg_noise = pg + rand(Uniform(-1e-4, 1e-4), length(pg))
+                x_temp[1:N_gen] .= pg_noise
+
+                qg_noise = zeros(length(qg))
+                if Surrogate["model_type"] == "CNF"
+                    qg_noise = qg + rand(Uniform(-1e-4, 1e-4), length(qg))
+                    x_temp[N_gen+1:2*N_gen] .= qg_noise
+                else
+                    qg_noise .= qg
+                end
+
+                grad = TSIConstraintPrime(
+                    psd,
+                    Surrogate,
+                    st_args,
+                    pg_noise,
+                    qg_noise,
+                    approx_type,
+                )
+
+                push!(x_hist, x_temp)
+                push!(g_hist, grad)
+
+                if i > 1
+                    push!(S, x_hist[2] - x_hist[1])
+                    push!(Y, g_hist[2] - g_hist[1])
+                    popfirst!(x_hist)
+                    popfirst!(g_hist)
+                end
+            end
+        else
+            println("SR1_hist was given.")
+            S = Vector{Vector{Float64}}()
+            Y = Vector{Vector{Float64}}()
+
+            x_hist = SR1_hist["x"]
+            g_hist = SR1_hist["grad"]
+            for i = 1:length(x_hist)-1
+                push!(S, x_hist[i+1] - x_hist[i])
+                push!(Y, g_hist[i+1] - g_hist[i])
+            end
+        end
+
+        rows_local, cols_local, top = TSIConstraintHessApprox(
             st_args,
-            pg_noise,
-            qg_noise,
-            approx_type,
+            B0,
+            S,
+            Y,
+            "Sparse_pattern",
+            Mel 
         )
 
-        push!(x_hist, x_temp)
-        push!(g_hist, grad)
-
-        if i > 1
-            push!(S, x_hist[2] - x_hist[1])
-            push!(Y, g_hist[2] - g_hist[1])
-            popfirst!(x_hist)
-            popfirst!(g_hist)
-        end
+        
     end
-
-    rows_local, cols_local, top = TSIConstraintHessApprox(
-        st_args,
-        B0,
-        S,
-        Y,
-        "Sparse_pattern",
-    )
-
     st_args["top_idx"] = top
 
     # Force lower-triangular canonical ordering
     for k in eachindex(rows_local)
+        # print(rows_local[k], cols_local[k])
         if rows_local[k] < cols_local[k]
             rows_local[k], cols_local[k] = cols_local[k], rows_local[k]
         end
@@ -1021,7 +1089,7 @@ function build_moi_solver_with_TSI_mixed!(
     @assert new_opt_block !== nothing
     @assert length(new_opt_block.constraint_bounds) == m_sym + 1
 
-    return index_map, src_backend
+    return index_map, src_backend, mixed_eval
 end
 
 
@@ -1055,9 +1123,13 @@ function TSACOPF_sparse_Limited_Memory_SR1(
     gamma::Float64 = 0.0,
     approx_type::String = "Sparse",
     r::Int = 6,
-    gamma_update::Bool = true,
+    gamma_update::Bool = true, 
+    gen_type::Union{Nothing, String} = nothing,
+    SR1_hist = nothing,
+    Mel = nothing,
+    diag_pattern = false
 )
-    st_args = load_case(psd, pf_limit_file, Surrogate["model_type"])
+    st_args = load_case(psd, pf_limit_file, Surrogate["model_type"], gen_type)
     st_args["tau"] = tau
     x0 = get_primal_starting_point(psd)
 
@@ -1065,7 +1137,7 @@ function TSACOPF_sparse_Limited_Memory_SR1(
     m, model_data = create_basecase_model(psd, nothing, x0)
 
     # Attach mixed NLP block
-    index_map, src_backend = build_moi_solver_with_TSI_mixed!(
+    index_map, src_backend, mixed_eval = build_moi_solver_with_TSI_mixed!(
         m,
         psd,
         opt,
@@ -1078,6 +1150,9 @@ function TSACOPF_sparse_Limited_Memory_SR1(
         approx_type = approx_type,
         r = r,
         gamma_update = gamma_update,
+        SR1_hist = SR1_hist, 
+        Mel = Mel,
+        diag_pattern = diag_pattern
     )
 
     # Solve
@@ -1092,6 +1167,10 @@ function TSACOPF_sparse_Limited_Memory_SR1(
         catch
             missing
         end
+
+    # println("num_iter = $num_iter, total_time = $total_time")
+
+    # println(mixed_eval.gamma_k)
 
     p_g_sol = get_primal_from_opt(opt, index_map, m[:p_g])
     q_g_sol = get_primal_from_opt(opt, index_map, m[:q_g])
@@ -1124,8 +1203,6 @@ function TSACOPF_sparse_Limited_Memory_SR1(
 
     norm_grad = dot(grad, grad)
 
-    hess_analy = Dict{Int, Dict{String,Any}}()
-
     return num_iter,
            total_time,
            base_cost,
@@ -1133,5 +1210,4 @@ function TSACOPF_sparse_Limited_Memory_SR1(
            termination_status,
            norm_grad,
            p_g_sol,
-           hess_analy
 end

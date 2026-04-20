@@ -25,15 +25,16 @@ function Mul_confi_get(confi_level)
     return Mul_confi
 end
 
-function load_case(psd::SCACOPFdata, pf_file::String, case_type)
+function load_case(psd::SCACOPFdata, pf_file::String, case_type, gen_type::Union{Nothing, String} = nothing)
     if case_type == "DSSP"
-        return load_case_DSSP(psd, pf_file)
+        return load_case_DSSP(psd, pf_file, gen_type)
     else
         return load_case_general(psd, pf_file)
     end
 end
 
-function load_case_general(psd::SCACOPFdata, pf_file::String)
+
+function load_case_general(psd::SCACOPFdata, pf_file::String, gen_type::Union{Nothing, String} = nothing)
 
     bus = psd.N
     loads = psd.loads
@@ -54,25 +55,47 @@ function load_case_general(psd::SCACOPFdata, pf_file::String)
     PL = loads[!, :PL] .* 0.01
     QL = -loads[!, :QL] .* 0.01
 
-    confi_level = 0
+    confi_level = 2
   
     Mul_confi = Mul_confi_get(confi_level)
 
     beta = 1e-3
-  
-    st_args = Dict(
-        "gen_idx" => gen_idx,
-        "numb_gen" => ng,
-        "numb_active_gen" => active_ng,
-        "numb_buses" => nb,
-        "numb_loads" => nl,
-        "PL" => PL,
-        "QL" => QL,
-        "num_J_H" => 0,
-        "Mul_confi" => Mul_confi,
-        "beta" => beta,
-        # "Mul_confi" => 0.0,
-    )
+
+    if gen_type !== nothing
+        data = matread(gen_type)
+        syn_idx = data["gen_syn_Genidx"]
+        rew_idx = data["gen_rew_Genidx"]
+
+        st_args = Dict(
+            "gen_idx" => gen_idx,
+            "numb_gen" => ng,
+            "numb_active_gen" => active_ng,
+            "numb_buses" => nb,
+            "numb_loads" => nl,
+            "PL" => PL,
+            "QL" => QL,
+            "num_J_H" => 0,
+            "Mul_confi" => Mul_confi,
+            "beta" => beta,
+            "syn_idx" => syn_idx,
+            "rew_idx" => rew_idx,
+            # "Mul_confi" => 0.0,
+        )
+    else    
+        st_args = Dict(
+            "gen_idx" => gen_idx,
+            "numb_gen" => ng,
+            "numb_active_gen" => active_ng,
+            "numb_buses" => nb,
+            "numb_loads" => nl,
+            "PL" => PL,
+            "QL" => QL,
+            "num_J_H" => 0,
+            "Mul_confi" => Mul_confi,
+            "beta" => beta,
+            # "Mul_confi" => 0.0,
+        )
+    end
   
     return st_args
 end

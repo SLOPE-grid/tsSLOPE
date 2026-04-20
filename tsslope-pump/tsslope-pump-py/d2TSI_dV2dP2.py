@@ -5,14 +5,18 @@ from numpy import conj, arange, diag, zeros, asmatrix, asarray
 from scipy.sparse import issparse, csr_matrix as sparse
 import torch
 from torch.autograd.functional import hessian
+from torch.func import hessian as hessian_GP
 from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
 import time
+
 
 def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
     if Surrogate['model_type'] == "CNF":
         return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
-    else:
+    elif Surrogate['model_type'] == "CNN":
         return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    elif  Surrogate['model_type'] == "DKL":
+        return d2TSI_dV2dP2_DKL(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """
@@ -273,3 +277,172 @@ def d2TSI_dV2dP2_GP(GPmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
             HT[m, n] = Hessian_np[0, i, j]
 
     return HT
+
+
+
+# from line_profiler_pycharm import profile
+# @profile
+def d2TSI_dV2dP2_DKL(GPmodel, Pg, Qg, Pl, Ql, muTSI, st_args, ppc):
+    nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
+    num_J_H, Mul_confi, gen_idx, syn_idx, rew_idx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_idx'], st_args['syn_idx'], st_args['rew_idx']
+    active_gen_only = Surrogate['active_gen_only']
+    ng0 = len(gen_idx)
+
+    model = GPmodel['model']
+    X_max = GPmodel['X_max']
+    X_min = GPmodel['X_min']
+    y_mean = GPmodel['y_mean']
+    y_std = GPmodel['y_std']
+    ng0 = len(gen_rewsyn_genidx)
+
+    model.eval()
+
+    X_full_np = np.hstack([Pg, Pl]) * 100.0
+    X_full = torch.tensor(X_full_np, dtype=torch.float32)
+
+    X_part = X_full[:, :ng0].clone().detach().requires_grad_(True)   # (1, ng0) or (ns, ng0)
+    X_const = X_full[:, ng0:].clone().detach()                       # (1, nPl)
+
+    if torch.cuda.is_available():
+        model = model.cuda()
+        X_part = X_part.cuda()
+        X_const = X_const.cuda()
+        X_max_t = torch.tensor(X_max, dtype=torch.float32).cuda()
+        X_min_t = torch.tensor(X_min, dtype=torch.float32).cuda()
+    else:
+        X_max_t = torch.tensor(X_max, dtype=torch.float32)
+        X_min_t = torch.tensor(X_min, dtype=torch.float32)
+
+    num_J_H = st_args['num_J_H']
+    Mul_confi = st_args['Mul_confi']
+    X_max_part = X_max_t[:ng0].reshape(-1)
+    X_min_part = X_min_t[:ng0].reshape(-1)
+
+    def _normalize_full(x_part: torch.Tensor) -> torch.Tensor:
+        x_full = torch.cat([x_part, X_const], dim=1)
+        x_full = x_full - X_min_t
+        x_full = 2.0 * (x_full / X_max_t) - 1.0
+        x_full = torch.clamp(x_full, -1.0, 1.0)
+        return x_full
+
+    HT = lil_matrix((2*nb+2*ng, 2*nb+2*ng))
+    
+    def mean_f(x_part):
+        Xn = _normalize_full(x_part)
+        return model.likelihood(model(Xn)).mean[0]
+
+    def std_f(x_part):
+        Xn = _normalize_full(x_part)
+        return model.likelihood(model(Xn)).stddev[0]
+
+    def mean_df(x_part):
+        return torch.autograd.functional.jacobian(mean_f, x_part, create_graph=True).sum(0)
+
+    def std_df(x_part):
+        return torch.autograd.functional.jacobian(std_f, x_part, create_graph=True).sum(0)
+
+    # X_max[2*ng0-1:] = -X_max[2*ng0-1:]  # dP和Pl方向相反
+
+    Hessian_mean = hessian_GP(mean_f)(X_part)
+    Hessian_mean = Hessian_mean.permute(1, 0, 2)
+    Hessian_mean = Hessian_mean * y_std / torch.mm(X_max_part.reshape(-1, 1), X_max_part.reshape(1, -1)) * 2 * 2
+                
+    Hessian_std = hessian_GP(std_f)(X_part)
+    Hessian_std = Hessian_std.permute(1, 0, 2)
+    Hessian_std = Hessian_std * y_std / torch.mm(X_max_part.reshape(-1, 1), X_max_part.reshape(1, -1)) * 2 * 2
+                
+    Hessian_mean = torch.autograd.functional.jacobian(mean_df, X_part)
+    Hessian_mean = Hessian_mean.permute(1, 0, 2)
+    Hessian_mean = Hessian_mean * y_std / torch.mm(X_max_part.reshape(-1, 1), X_max_part.reshape(1, -1)) * 2 * 2
+    
+    Hessian_std = torch.autograd.functional.jacobian(std_df, X_part)
+    Hessian_std = Hessian_std.permute(1, 0, 2)
+    Hessian_std = Hessian_std * y_std / torch.mm(X_max_part.reshape(-1, 1), X_max_part.reshape(1, -1)) * 2 * 2
+    
+    Hessian_mean_np = Hessian_mean.cpu().detach().numpy()
+    Hessian_std_np = Hessian_std.cpu().detach().numpy()
+
+    Hessian_np = Hessian_mean_np.copy()
+
+    Hessian_np[0, :, :] = muTSI * (Mul_confi * Hessian_std_np[0, :, :] - Hessian_mean_np[0, :, :])
+
+    return HT
+
+
+def d2TSI_dV2dP2_DKL(GPmodel, Pg, Qg, Pl, Ql, muTSI, st_args, ppc):
+    nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
+    num_J_H, Mul_confi, gen_idx, syn_idx, rew_idx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_idx'], st_args['syn_idx'], st_args['rew_idx']
+    active_gen_only = Surrogate['active_gen_only']
+    ng0 = len(gen_idx)
+
+    model = GPmodel['model']
+    likelihood = GPmodel['likelihood']
+    X_max = GPmodel['X_max']
+    X_min = GPmodel['X_min']
+    y_mean = GPmodel['y_mean']
+    y_std = GPmodel['y_std']
+    ng0 = len(gen_rewsyn_genidx)
+
+    model.eval()
+    likelihood.eval()
+
+    Pl = st_args['PL']
+    Ql = st_args['QL']
+
+    if active_gen_only:
+        active_syn_idx = list(set(syn_idx) & set(gen_idx))
+        active_rew_idx = list(set(rew_idx) & set(gen_idx))
+        Pg_active_syn_idx = Pg[active_syn_idx].reshape(1, -1)
+        Pg_active_rew_idx = Pg[active_rew_idx].reshape(1, -1)
+        # Qg_active_syn_idx = Qg[active_syn_idx].reshape(1, -1)
+        # Qg_active_rew_idx = Qg[active_rew_idx].reshape(1, -1)
+
+        X_part_np = np.hstack([Pg_active_rew_idx, Pg_active_syn_idx])
+    else:
+        Pg_syn_idx = Pg[syn_idx].reshape(1, -1)
+        Pg_rew_idx = Pg[rew_idx].reshape(1, -1)
+        Qg_syn_idx = Qg[syn_idx].reshape(1, -1)
+        Qg_rew_idx = Qg[rew_idx].reshape(1, -1)
+
+        X_part_np = np.hstack([Pg_rew_idx, Pg_syn_idx])
+
+    X_const_np = Pl.reshape(1, -1)    
+
+    if torch.cuda.is_available():
+        model = model.cuda()
+        likelihood = likelihood.cuda()
+        X_max_t = torch.tensor(X_max, dtype=torch.float64).cuda()
+        X_min_t = torch.tensor(X_min, dtype=torch.float64).cuda()
+        X_part = torch.tensor(X_part_np, dtype=torch.float64, requires_grad=True).cuda()
+        X_const = torch.tensor(X_const_np, dtype=torch.float64).cuda()
+    else:
+        X_max_t = torch.tensor(X_max, dtype=torch.float64)
+        X_min_t = torch.tensor(X_min, dtype=torch.float64)
+        X_part = torch.tensor(X_part_np, dtype=torch.float64, requires_grad=True)
+        X_const = torch.tensor(X_const_np, dtype=torch.float64)
+
+    X_max_part = X_max_t[:ng0]
+    X_min_part = X_min_t[:ng0]
+
+    def constraint_f_part(Xp):
+        X_full = torch.cat([Xp, X_const], dim=1)
+
+        X_norm = X_full - X_min_t
+        X_norm = 2.0 * (X_norm / X_max_t) - 1.0
+        X_norm = torch.clamp(X_norm, -1.0, 1.0)
+
+        GPpre = likelihood(model(X_norm))
+        TSI_mean = GPpre.mean[0] * y_std + y_mean
+        TSI_std = GPpre.stddev[0] * y_std
+
+        return Mul_confi * TSI_std - TSI_mean  # means TSI_interval_half - TSI_mean < 0 
+
+    Hessian_part = torch.autograd.functional.hessian(constraint_f_part, X_part)
+
+    scale = (2.0 / X_max_part).reshape(-1)
+    Hessian_part = Hessian_part * torch.outer(scale, scale)
+
+    Hessian_part_np = Hessian_part.detach().cpu().numpy().squeeze()
+
+    return Hessian_part_np
+

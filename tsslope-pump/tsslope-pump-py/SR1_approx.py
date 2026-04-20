@@ -84,13 +84,13 @@ def find_sparse_pattern(B0, s, y, n = 10):
     rows = rows[mask]
     cols = cols[mask]
 
+    print(f"Number of nonzeros in the sparse pattern {len(rows)}")
+
     return rows + 1, cols + 1, top_idx
 
 def SR1_spar_Sparse(B0, s, y, top_idx):
     """
     Sparse block SR1 Hessian approximation.
-    Mel is currently set to sqrt(10 n) but will later be
-    exposed as a tunable sparsity parameter.
     """
 
     L, D, S, Y = make_L_D_S_Y(s, y)
@@ -121,9 +121,11 @@ def SR1_spar_Sparse(B0, s, y, top_idx):
     # Sparse low-rank SR1 update
     B_til = B0 + Q_til @ np.diag(w) @ Q_til.T
 
+    # print(f"Number of nonzeros {np.count_nonzero(B_til)}\n")
+
     return B_til
 
-def hess_approx(B, S, Y, approx_type="Sparse", top_indices = []):
+def hess_approx(B, S, Y, approx_type="Sparse", top_indices = [], Mel = 10):
 
     if approx_type == "Full":
         return SR1_approx_Full(B, S, Y)
@@ -138,7 +140,10 @@ def hess_approx(B, S, Y, approx_type="Sparse", top_indices = []):
             return SR1_spar_Sparse(B, S, Y, top_indices)
 
     elif approx_type == "Sparse_pattern":
-            return find_sparse_pattern(B, S, Y)
+        # if Mel != None:
+        #     return find_sparse_pattern(B, S, Y, 10)
+        # else:
+        return find_sparse_pattern(B, S, Y, Mel)
 
     else:
         if len(S) == 0:

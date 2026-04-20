@@ -10,6 +10,8 @@ import time
 def TSI_constraint(Surrogate, Pg, Qg, st_args):
     if Surrogate['model_type'] == "CNF":
         return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
+    elif Surrogate['model_type'] == "DKL":
+        return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
     else:
         return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
 
@@ -189,3 +191,123 @@ def TSI_constraint_GP(GPmodel, Pg, Qg, st_args):
     TSI_interval_half = Mul_confi * TSI_std
 
     return TSI_interval_half - TSI_mean
+
+
+# # for now the pg's are in the wrong order.
+# def TSI_constraint_DKL(GPmodel, Pg, Qg, st_args):
+#     nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
+#     num_J_H, Mul_confi, gen_idx, syn_idx, rew_idx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_idx'], st_args['syn_idx'], st_args['rew_idx']
+#     active_gen_only = Surrogate['active_gen_only']
+#     ng0 = len(gen_idx)
+
+#     model = GPmodel['model']
+#     likelihood = GPmodel['likelihood']
+#     X_max = GPmodel['X_max']
+#     X_min = GPmodel['X_min']
+#     y_mean = GPmodel['y_mean']
+#     y_std = GPmodel['y_std']
+
+#     model.eval()  
+
+#     PL = st_args['PL']
+#     QL = st_args['QL']
+
+#     if active_gen_only:
+#         active_syn_idx = list(set(syn_idx) & set(gen_idx))
+#         active_rew_idx = list(set(rew_idx) & set(gen_idx))
+#         Pg_active_syn_idx = Pg[active_syn_idx].reshape(1, -1)
+#         Pg_active_rew_idx = Pg[active_rew_idx].reshape(1, -1)
+#         Qg_active_syn_idx = Qg[active_syn_idx].reshape(1, -1)
+#         Qg_active_rew_idx = Qg[active_rew_idx].reshape(1, -1)
+
+#         Pg_input = np.hstack([Pg_active_rew_idx, Pg_active_syn_idx])
+#         Qg_input = np.hstack([Qg_active_rew_idx, Qg_active_syn_idx])
+#     else:
+#         Pg_syn_idx = Pg[syn_idx].reshape(1, -1)
+#         Pg_rew_idx = Pg[rew_idx].reshape(1, -1)
+#         Qg_syn_idx = Qg[syn_idx].reshape(1, -1)
+#         Qg_rew_idx = Qg[rew_idx].reshape(1, -1)
+
+#         Pg_input = np.hstack([Pg_rew_idx, Pg_syn_idx])
+#         Qg_input = np.hstack([Qg_rew_idx, Qg_syn_idx])
+
+#     X = np.hstack([Pg_input, Pl, Ql])
+#     X = torch.autograd.Variable(torch.tensor(X).float(), requires_grad=True)
+
+#     GPpre = likelihood(model(X))
+#     TSI_mean = GPpre.mean * y_std + y_mean
+#     TSI_mean = TSI_mean.cpu().detach().numpy()
+#     TSI_std = GPpre.stddev * y_std
+#     TSI_std = TSI_std.cpu().detach().numpy()
+
+#     TSI_interval_half = Mul_confi * TSI_std
+#     constraint = TSI_interval_half - TSI_mean
+
+#     return constraint.item()
+
+def TSI_constraint_DKL(GPmodel, Pg, Qg, st_args):
+    nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
+    num_J_H, Mul_confi, gen_idx, syn_idx, rew_idx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_idx'], st_args['syn_idx'], st_args['rew_idx']
+    active_gen_only = Surrogate['active_gen_only']  # check variable Surrogate
+    ng0 = len(gen_idx)
+
+    model = GPmodel['model']
+    likelihood = GPmodel['likelihood']
+    X_max = GPmodel['X_max']
+    X_min = GPmodel['X_min']
+    y_mean = GPmodel['y_mean']
+    y_std = GPmodel['y_std']
+
+    model.eval()
+    likelihood.eval()
+
+    Pl = st_args['PL']
+    Ql = st_args['QL']
+
+    if active_gen_only:
+        active_syn_idx = list(set(syn_idx) & set(gen_idx))
+        active_rew_idx = list(set(rew_idx) & set(gen_idx))
+        Pg_active_syn_idx = Pg[active_syn_idx].reshape(1, -1)
+        Pg_active_rew_idx = Pg[active_rew_idx].reshape(1, -1)
+        # Qg_active_syn_idx = Qg[active_syn_idx].reshape(1, -1)
+        # Qg_active_rew_idx = Qg[active_rew_idx].reshape(1, -1)
+
+        Pg_input = np.hstack([Pg_active_rew_idx, Pg_active_syn_idx])
+        # Qg_input = np.hstack([Qg_active_rew_idx, Qg_active_syn_idx])
+    else:
+        Pg_syn_idx = Pg[syn_idx].reshape(1, -1)
+        Pg_rew_idx = Pg[rew_idx].reshape(1, -1)
+        Qg_syn_idx = Qg[syn_idx].reshape(1, -1)
+        Qg_rew_idx = Qg[rew_idx].reshape(1, -1)
+
+        Pg_input = np.hstack([Pg_rew_idx, Pg_syn_idx])
+        # Qg_input = np.hstack([Qg_rew_idx, Qg_syn_idx])
+
+    X = np.hstack([Pg_input, Pl])
+    X = torch.tensor(X, dtype=torch.float64)
+
+    if torch.cuda.is_available():
+        model = model.cuda()
+        likelihood = likelihood.cuda()
+        X = X.cuda()
+        X_max = torch.tensor(X_max, dtype=torch.float64).cuda()
+        X_min = torch.tensor(X_min, dtype=torch.float64).cuda()
+    else:
+        X_max = torch.tensor(X_max, dtype=torch.float64)
+        X_min = torch.tensor(X_min, dtype=torch.float64)
+
+    X = X - X_min
+    X = 2.0 * (X / X_max) - 1.0
+    X = torch.clamp(X, -1.0, 1.0)
+
+    GPpre = likelihood(model(X))
+    TSI_mean = GPpre.mean * y_std + y_mean
+    TSI_mean = TSI_mean.cpu().detach().numpy()
+    TSI_std = GPpre.stddev * y_std
+    TSI_std = TSI_std.cpu().detach().numpy()
+
+    TSI_interval_half = Mul_confi * TSI_std
+    constraint = TSI_interval_half - TSI_mean  # means TSI_interval_half - TSI_mean < 0 
+
+    return constraint.item()
+

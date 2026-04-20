@@ -5,11 +5,13 @@ path_to_tsslope = "../../tsslope-pump"
 model_path =  "../../example/model_state_DSPP_500_0.990_0.884_28.9_9.0_4.2_20000_318.0_300_6_0.021_0.00075.pth"
 data_record =  "../../example/data_record.mat"
 pf_limit_file = "../../example/pf_new.mat"
+gen_type_7k_file = "../../example/Texas7k_gentype.mat"
 
 CNN_model_path =  "../../tsslope-ml/CNN1D_SiLU_acc_0.92378.pth"
 CNF_model_path =  "../../tsslope-ml/cdf_flow_checkpoint.pt"
 CNF_model_final_path =  "../../tsslope-ml/cdf_flow_checkpoint_final.pt"
 CNF_model_min_path =  "../../tsslope-ml/cdf_flow_checkpoint_min.pt"
+DKL_model_path =  "../../tsslope-ml/DKL_Texas7k_sign0.954150_rmse10.594628_mae6.352512_n100000_t919.pt"
 LLNL_data_record =  "../../tsslope-ml/combined_llnl_data.mat"
 
 CNN_GELU_1_model_path =  "../../tsslope-ml/Models_parameters/CNN1D_GELU_seed_9000_acc_0.92381_auc_0.96467.pth"

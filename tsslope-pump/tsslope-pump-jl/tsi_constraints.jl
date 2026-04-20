@@ -141,7 +141,7 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   return Float64.(hess)
 end
 
-function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse")
+function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse", Mel = nothing)
 
   # Call Python function via PyCall
   tsilib = ret_tsilib()
@@ -155,12 +155,14 @@ function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse")
     gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
     hess = dTSI2[gen_idx_full, gen_idx_full]
 
-    # println("Created Approximation")
-
     return Float64.(hess)
   elseif approx_type == "Sparse_pattern"
     # println("In Sparse Pattern")
-    I, J, top = tsilib.eval_tsi_h_approx(B, S, Y, approx_type)
+    if Mel == nothing
+      I, J, top = tsilib.eval_tsi_h_approx(B, S, Y, approx_type)
+    else
+      I, J, top = tsilib.eval_tsi_h_approx(B, S, Y, approx_type, [], Mel)
+    end
 
     return Int.(I), Int.(J), Int.(top)
   else

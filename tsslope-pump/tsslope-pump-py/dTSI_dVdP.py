@@ -11,6 +11,8 @@ def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, st_args):
 
     if Surrogate['model_type'] == "CNF":
         return dTSI_dVdP_CNF(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    elif Surrogate['model_type'] == "CNN":
+        return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
     else:
         return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
 
@@ -191,7 +193,26 @@ def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, st_args):
     pgen_ls = st_args['pgen_ls']
     pgen_ls = np.array(pgen_ls)
 
-    X = np.hstack([Pg, Pl, Ql])
+    if active_gen_only:
+        active_syn_idx = list(set(syn_idx) & set(gen_idx))
+        active_rew_idx = list(set(rew_idx) & set(gen_idx))
+        Pg_active_syn_idx = Pg[active_syn_idx].reshape(1, -1)
+        Pg_active_rew_idx = Pg[active_rew_idx].reshape(1, -1)
+        Qg_active_syn_idx = Qg[active_syn_idx].reshape(1, -1)
+        Qg_active_rew_idx = Qg[active_rew_idx].reshape(1, -1)
+
+        Pg_input = np.hstack([Pg_active_rew_idx, Pg_active_syn_idx])
+        Qg_input = np.hstack([Qg_active_rew_idx, Qg_active_syn_idx])
+    else:
+        Pg_syn_idx = Pg[syn_idx].reshape(1, -1)
+        Pg_rew_idx = Pg[rew_idx].reshape(1, -1)
+        Qg_syn_idx = Qg[syn_idx].reshape(1, -1)
+        Qg_rew_idx = Qg[rew_idx].reshape(1, -1)
+
+        Pg_input = np.hstack([Pg_rew_idx, Pg_syn_idx])
+        Qg_input = np.hstack([Qg_rew_idx, Qg_syn_idx])
+
+    X = np.hstack([Pg_input, Pl, Ql])
     X = torch.autograd.Variable(torch.tensor(X).float(), requires_grad=True)
 
     if torch.cuda.is_available():
@@ -216,10 +237,8 @@ def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, st_args):
             return torch.autograd.functional.jacobian(std_f, X, create_graph=True).sum(0)
 
         # full Jacobian
-        # start_time = time.time()
         Jacobian_mean = torch.autograd.functional.jacobian(mean_f, X)
         Jacobian_mean = Jacobian_mean * (y_std / (X_max/2.0))  # Converting from dy/dx to dY/dX
-        # print(time.time()-start_time)
 
         Jacobian_std = torch.autograd.functional.jacobian(std_f, X)
         Jacobian_std = Jacobian_std * (y_std / (X_max/2.0))
@@ -264,3 +283,124 @@ def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, st_args):
     dTSI[0, GP_to_IPM] = Jacobian_np[0, :]
 
     return dTSI
+
+
+# from line_profiler_pycharm import profile
+# @profile
+# def dTSI_dVdP(GPmodel, Pg, Qg, Pl, Ql, st_args):
+
+#     nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
+#     num_J_H, Mul_confi, gen_rewsyn_genidx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_rewsyn_genidx']
+#     ng0 = len(gen_rewsyn_genidx)
+
+#     model = GPmodel['model']
+#     likelihood = GPmodel['model']
+#     X_max = GPmodel['X_max']
+#     X_min = GPmodel['X_min']
+#     y_mean = GPmodel['y_mean']
+#     y_std = GPmodel['y_std']
+
+#     model.eval()
+
+#     X = np.hstack([Pg, Pl]) 
+#     X = torch.autograd.Variable(torch.tensor(X).float(), requires_grad=True)
+
+#     if torch.cuda.is_available():
+#         model.cuda()
+#         X, X_max, X_min = X.cuda(), torch.tensor(X_max).cuda(), torch.tensor(X_min).cuda()
+
+#     X = X - X_min
+#     X = 2.0 * (X / X_max) - 1.0
+#     X = torch.clamp(X, -1, 1)  # 限制极端值导致的零梯度
+
+#     def mean_f(X):
+#         return model.likelihood(model(X)).mean[0] # +y_mean和不加的梯度一致
+
+#     def std_f(X):
+#         return model.likelihood(model(X)).stddev[0]
+
+#     def mean_df(X):
+#         return torch.autograd.functional.jacobian(mean_f, X, create_graph=True).sum(0)
+
+#     def std_df(X):
+#         return torch.autograd.functional.jacobian(std_f, X, create_graph=True).sum(0)
+
+#     # full Jacobian
+#     Jacobian_mean = torch.autograd.functional.jacobian(mean_f, X)
+#     Jacobian_mean = Jacobian_mean * (y_std / (X_max/2.0))  # 从dy/dx转换为dY/dX
+
+#     Jacobian_std = torch.autograd.functional.jacobian(std_f, X)
+#     Jacobian_std = Jacobian_std * (y_std / (X_max/2.0))
+
+#     Jacobian_mean_np = Jacobian_mean.cpu().detach().numpy()
+#     Jacobian_std_np = Jacobian_std.cpu().detach().numpy()
+
+#     Jacobian_np = Mul_confi * Jacobian_std_np - Jacobian_mean_np
+
+#     return dTSI
+
+# def dTSI_dVdP(GPmodel, Pg, Qg, Pl, Ql, st_args):
+
+#     nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
+#     num_J_H, Mul_confi, gen_rewsyn_genidx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_rewsyn_genidx']
+#     ng0 = len(gen_rewsyn_genidx)
+
+#     model = GPmodel['model']
+#     likelihood = GPmodel['likelihood']
+#     X_max = GPmodel['X_max']
+#     X_min = GPmodel['X_min']
+#     y_mean = GPmodel['y_mean']
+#     y_std = GPmodel['y_std']
+
+#     model.eval()
+#     likelihood.eval()
+
+#     Pl = st_args['PL']
+#     Ql = st_args['QL']
+
+#     if active_gen_only:
+#         active_syn_idx = list(set(syn_idx) & set(gen_idx))
+#         active_rew_idx = list(set(rew_idx) & set(gen_idx))
+#         Pg_active_syn_idx = Pg[active_syn_idx].reshape(1, -1)
+#         Pg_active_rew_idx = Pg[active_rew_idx].reshape(1, -1)
+#         # Qg_active_syn_idx = Qg[active_syn_idx].reshape(1, -1)
+#         # Qg_active_rew_idx = Qg[active_rew_idx].reshape(1, -1)
+
+#         Pg_input = np.hstack([Pg_active_rew_idx, Pg_active_syn_idx])
+#         # Qg_input = np.hstack([Qg_active_rew_idx, Qg_active_syn_idx])
+#     else:
+#         Pg_syn_idx = Pg[syn_idx].reshape(1, -1)
+#         Pg_rew_idx = Pg[rew_idx].reshape(1, -1)
+#         Qg_syn_idx = Qg[syn_idx].reshape(1, -1)
+#         Qg_rew_idx = Qg[rew_idx].reshape(1, -1)
+
+#         Pg_input = np.hstack([Pg_rew_idx, Pg_syn_idx])
+#         # Qg_input = np.hstack([Qg_rew_idx, Qg_syn_idx])
+
+#     X = np.hstack([Pg_input, Pl])
+#     X = torch.autograd.Variable(torch.tensor(X).float(), requires_grad=True)
+
+#     if torch.cuda.is_available():
+#         model = model.cuda()
+#         likelihood = likelihood.cuda()
+#         X = X.cuda()
+#         X_max = torch.tensor(X_max, dtype=torch.float64).cuda()
+#         X_min = torch.tensor(X_min, dtype=torch.float64).cuda()
+#     else:
+#         X_max = torch.tensor(X_max, dtype=torch.float64)
+#         X_min = torch.tensor(X_min, dtype=torch.float64)
+
+#     X_norm = X - X_min
+#     X_norm = 2.0 * (X_norm / X_max) - 1.0
+#     X_norm = torch.clamp(X_norm, -1.0, 1.0)
+
+#     def constraint_f(X_in):
+#         GPpre = likelihood(model(X_in))
+#         TSI_mean = GPpre.mean[0] * y_std + y_mean
+#         TSI_std = GPpre.stddev[0] * y_std
+#         return Mul_confi * TSI_std - TSI_mean  # means TSI_interval_half - TSI_mean < 0 
+
+#     dTSI = torch.autograd.functional.jacobian(constraint_f, X_norm)
+#     dTSI = dTSI * (2.0 / X_max)   # chain rule: d/dX_raw
+
+#     return dTSI

@@ -1,3 +1,5 @@
+import glob
+import re
 import gpytorch
 import torch
 import torch.nn as nn
@@ -25,8 +27,173 @@ import scipy.io as scio
 
 from typing import Tuple, Optional
 
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+warnings.filterwarnings("ignore", category=UserWarning)
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "True")
 
+
+# =========================
+# Model definition (DKL)
+# =========================
+
+def _num_key(p: str) -> int:
+    m = re.search(r"TSI_batch_(\d+)\.mat$", os.path.basename(p))
+    return int(m.group(1)) if m else 10**9
+
+class LargeFeatureExtractor(nn.Sequential):
+    def __init__(self, data_dim: int):
+        super().__init__()
+        self.add_module("linear1", nn.Linear(data_dim, 400))
+        self.add_module("relu1", nn.ReLU())
+        self.add_module("linear2", nn.Linear(400, 80))
+        self.add_module("relu2", nn.ReLU())
+        self.add_module("linear3", nn.Linear(80, 2))  # feature_dim=2
+
+class GPRegressionModel(gpytorch.models.ExactGP):
+    """
+    DKL (feature extractor + KISS-GP / GridInterpolationKernel)
+    """
+    def __init__(self, train_x, train_y, likelihood, data_dim: int, grid_size: int = 100):
+        super().__init__(train_x, train_y, likelihood)
+        self.mean_module = gpytorch.means.ConstantMean()
+        self.covar_module = gpytorch.kernels.GridInterpolationKernel(
+            gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel(ard_num_dims=2)),
+            num_dims=2,
+            grid_size=grid_size,
+        )
+        self.feature_extractor = LargeFeatureExtractor(data_dim)
+        self.scale_to_bounds = gpytorch.utils.grid.ScaleToBounds(-1.0, 1.0)
+
+    def forward(self, x):
+        projected_x = self.feature_extractor(x)
+        projected_x = self.scale_to_bounds(projected_x)
+        mean_x = self.mean_module(projected_x)
+        covar_x = self.covar_module(projected_x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
+# =========================
+# Utilities (from plot-DKL.py)
+# =========================
+
+def load_bundle(bundle_path: str, device: torch.device):
+    try:
+        bundle = torch.load(bundle_path, map_location=device, weights_only=False)
+    except TypeError:
+        bundle = torch.load(bundle_path, map_location=device)
+
+    if not isinstance(bundle, dict):
+        raise RuntimeError("no bundle .pt")
+    return bundle
+
+def normalize_x_fullsample(x_raw: torch.Tensor, X_min: torch.Tensor, X_max: torch.Tensor) -> torch.Tensor:
+    eps = 1e-12
+    X_max = torch.clamp(X_max, min=eps)
+    x_shift = x_raw - X_min
+    return 2.0 * (x_shift / X_max) - 1.0
+
+def rebuild_all_data_from_disk(bundle: dict, device: torch.device, dir_root: str):
+    data_dir = os.path.join(dir_root, "batches")
+    tsi_names = bundle["tsi_names"]
+
+    driver_dir = os.path.join(dir_root, tsi_names[0])
+    driver_files = glob.glob(os.path.join(driver_dir, "TSI_batch_*.mat"))
+    driver_files.sort(key=_num_key)
+    if not driver_files:
+        raise RuntimeError(f"batch：{driver_dir} no TSI_batch_*.mat")
+
+    delete_idx = bundle["delete_idx"].astype(np.int64)
+    min_valid_tsi = float(bundle["min_valid_tsi"])
+
+    X_min = torch.tensor(bundle["X_min"], dtype=torch.float32, device=device)
+    X_max = torch.tensor(bundle["X_max"], dtype=torch.float32, device=device)
+    y_mean = float(bundle["y_mean"])
+    y_std = float(bundle["y_std"])
+
+    data_list = []
+    data_list2 = []
+    y_list = []
+
+    for driver_fp in driver_files:
+        idx = _num_key(driver_fp)
+
+        data_fp = os.path.join(data_dir, f"samples_batch_{idx:03d}.mat")
+        if not os.path.exists(data_fp):
+            continue
+
+        data_res = scio.loadmat(data_fp)
+        if not all(k in data_res for k in ["p_rew_sample", "p_syn_sample", "p_load_sample"]):
+            continue
+
+        Data_raw = np.hstack([data_res["p_rew_sample"], data_res["p_syn_sample"], data_res["p_load_sample"]]).astype(np.float32)
+        Data_raw2 = np.hstack([data_res["p_rew_sample"], data_res["p_syn_sample"], data_res["p_load_sample"], data_res["q_load_sample"]]).astype(np.float32)
+
+        Data_raw = np.delete(Data_raw, delete_idx, axis=1)
+
+        tsi_cols = []
+        for name in tsi_names:
+            tsi_fp = os.path.join(dir_root, name, f"TSI_batch_{idx:03d}.mat")
+            tsi_res = scio.loadmat(tsi_fp)
+            tsi_vec = tsi_res["TSI"].min(1).reshape(-1, 1).astype(np.float32)
+            tsi_cols.append(tsi_vec)
+
+        min_n = min([Data_raw.shape[0]] + [t.shape[0] for t in tsi_cols])
+        Data_raw = Data_raw[:min_n, :]
+        TSI_4 = np.hstack([t[:min_n, :] for t in tsi_cols])
+
+        y_raw = np.min(TSI_4, axis=1).astype(np.float32)
+        y_raw = np.where(y_raw == -100, min_valid_tsi, y_raw)
+
+        data_list.append(Data_raw)
+        data_list2.append(Data_raw2)
+        y_list.append(y_raw)
+
+    if not data_list:
+        raise RuntimeError("重建数据失败：未读取到任何 batch。请检查 dir_root 数据路径。")
+
+    X_raw_all = np.vstack(data_list)
+    X_raw_all2 = np.vstack(data_list2)
+    y_raw_all = np.concatenate(y_list)
+
+    mpc = scio.loadmat('Texas7k_20210804.mat')
+    busnum_to_idx = {int(busnum): idx for idx, busnum in enumerate(mpc["bus"][:, 0])}
+    data = np.load("Texas7k_20210804.npz", allow_pickle=True)
+    load = data["load"]
+    load[:, 0] = np.vectorize(busnum_to_idx.get)(load[:, 0]).astype(int)
+    load_bus_idx = load[:, 0].astype(int)
+    unique_bus, inv = np.unique(load_bus_idx, return_inverse=True)
+    nbus_load = len(unique_bus)
+
+    nw = data_res["p_rew_sample"].shape[1]
+    ng = data_res["p_syn_sample"].shape[1]
+    nd = data_res["p_load_sample"].shape[1]
+
+    P_rew_all = X_raw_all[:, :nw]
+    P_syn_all = X_raw_all[:, nw:nw+ng]
+    P_load_all = X_raw_all[:, nw+ng:]
+    Q_load_all = X_raw_all2[:, nw+ng+nd:]
+
+    P_load_merged = np.zeros((P_load_all.shape[0], nbus_load), dtype=P_load_all.dtype)
+    Q_load_merged = np.zeros((Q_load_all.shape[0], nbus_load), dtype=Q_load_all.dtype)
+    for j in range(nd):
+        P_load_merged[:, inv[j]] += P_load_all[:, j]
+        Q_load_merged[:, inv[j]] += Q_load_all[:, j]
+
+    X_raw_all = np.hstack([P_rew_all, P_syn_all, P_load_merged])
+    X_raw_all2 = np.hstack([P_rew_all, P_syn_all, P_load_merged, Q_load_merged])
+
+    X_raw_all_t = torch.tensor(X_raw_all, dtype=torch.float32, device=device)
+    X_all_norm = normalize_x_fullsample(X_raw_all_t, X_min, X_max)
+
+    y_all_norm = (torch.tensor(y_raw_all, dtype=torch.float32, device=device) - y_mean) / y_std
+
+    shuffled_indices = torch.tensor(bundle["shuffled_indices"].astype(np.int64), device=device)
+    X_all_norm = X_all_norm.index_select(dim=0, index=shuffled_indices)
+    y_all_norm = y_all_norm.index_select(dim=0, index=shuffled_indices)
+
+    return X_all_norm, y_all_norm, X_raw_all2, y_raw_all
+
+# =========================
+# Model definition (CNF)
+# =========================
 
 class StandardScalerTorch(nn.Module):
     def __init__(self):
@@ -212,6 +379,9 @@ class ConditionalCDF(nn.Module):
         dQ_raw_dx = 200.0 * dQ01dx
         return q_raw.detach(), dQ_raw_dx.detach()
 
+# =========================
+# Model definition (DSPP)
+# =========================
 
 class DSPPHiddenLayer(DSPPLayer):
     def __init__(self, input_dims, output_dims, num_inducing=300, inducing_points=None, mean_type='constant', Q=8):
@@ -266,7 +436,6 @@ class DSPPHiddenLayer(DSPPLayer):
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
-
 class TwoLayerDSPP(DSPP):
     def __init__(self, train_x_shape, inducing_points, num_inducing, hidden_dim=3, Q=3):
         hidden_layer = DSPPHiddenLayer(
@@ -320,6 +489,10 @@ class TwoLayerDSPP(DSPP):
                 lls.append(batch_log_prob.cpu())
 
         return torch.cat(mus, dim=-1), torch.cat(variances, dim=-1), torch.cat(lls, dim=-1)
+
+# =========================
+# Model definition (CNNs)
+# =========================
 
 class CNN1D(nn.Module):
     def __init__(self):
@@ -485,7 +658,7 @@ def load_surrogate(Model_Path, data_record, model_type, active_gen_only = True):
     elif model_type == "DSPP":
         return load_GPmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     else:
-        print("Incorrect model_type. Code will run without a surrogate")
+        print("No model_type was chosen. Code will run without a surrogate")
 
         data = scio.loadmat(data_record)
         data = data['Data']
@@ -826,3 +999,48 @@ def load_GPmodel(Model_Path, data_record, model_type,  active_gen_only = True):
     TSI = TSI.min(1)
 
     return GPmodel, data, TSI
+
+# =========================
+# Main API you call: load_DKLmodel
+# =========================
+
+def load_DKLmodel(Model_Path: str, data_record, model_type, active_gen_only = True):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # 1) load bundle
+    if not os.path.exists(Model_Path):
+        raise FileNotFoundError(f"Model_Path no exist：{Model_Path}")
+    bundle = load_bundle(Model_Path, device=device)
+
+    # 3) rebuild normalized dataset
+    X_all_norm, y_all_norm, X_raw_all, y_raw_all = rebuild_all_data_from_disk(bundle, device=device, dir_root=dir_root)
+
+    train_n = int(bundle["train_n"])
+    train_x = X_all_norm[:train_n, :].contiguous()
+    train_y = y_all_norm[:train_n].contiguous()
+
+    # 4) build model + load weights (DKL)
+    data_dim = int(bundle["data_dim_after_delete"])
+    grid_size = int(bundle.get("grid_size", 100))
+
+    likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device)
+    model = GPRegressionModel(train_x, train_y, likelihood, data_dim=data_dim, grid_size=grid_size).to(device)
+
+    model.load_state_dict(bundle["model_state_dict"])
+    likelihood.load_state_dict(bundle["likelihood_state_dict"])
+    model.eval()
+    likelihood.eval()
+
+    # 6) assemble DKLmodel dict
+    DKLmodel = {
+        "model": model,
+        "likelihood": likelihood,
+        "device": device,
+        "X_min": np.array(bundle["X_min"], dtype=np.float32),
+        "X_max": np.array(bundle["X_max"], dtype=np.float32),
+        "y_mean": float(bundle["y_mean"]),
+        "y_std": float(bundle["y_std"]),
+        "model_type": model_type
+    }
+
+    return DKLmodel, X_raw_all, y_raw_all

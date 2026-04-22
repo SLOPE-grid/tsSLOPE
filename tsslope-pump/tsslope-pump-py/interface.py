@@ -16,7 +16,10 @@ from .load_Surrogate    import load_surrogate
 
 
 def load_model(model_path, data_record, model_type, active_gen_only = True):
-   return load_surrogate(model_path, data_record, model_type, active_gen_only = active_gen_only)
+    print(model_path)
+    print(data_record)
+    print(model_type)
+    return load_surrogate(model_path, data_record, model_type, active_gen_only = active_gen_only)
 
 
 #def load_config(*_):

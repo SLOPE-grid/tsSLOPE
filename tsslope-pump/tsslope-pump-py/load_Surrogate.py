@@ -660,16 +660,17 @@ def load_surrogate(Model_Path, data_record, model_type, active_gen_only = True):
     else:
         print("No model_type was chosen. Code will run without a surrogate")
 
-        data = scio.loadmat(data_record)
-        data = data['Data']
-        TSI = data[:, -1].reshape(-1, 1)
-        TSI = (TSI >= 0).astype(int)
+        # data = scio.loadmat(data_record)
+        # data = data['Data']
+        # TSI = data[:, -1].reshape(-1, 1)
+        # TSI = (TSI >= 0).astype(int)
 
-        data = data[:, :-1]
+        # data = data[:, :-1]
 
         Surrogate = {"model_type": None}
 
-        return Surrogate, data, TSI
+        # return Surrogate, data, TSI
+        return Surrogate
 
      
 def load_CNFmodel(
@@ -744,23 +745,24 @@ def load_CNFmodel(
     Surrogate['model_type'] = model_type
     Surrogate['active_gen_only'] = active_gen_only
 
-    return Surrogate, data, TSI
+    # return Surrogate, data, TSI
+    return Surrogate
 
 def load_CNNmodel(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
-    data = scio.loadmat(data_record)
-    data = data['Data']
+    # data = scio.loadmat(data_record)
+    # data = data['Data']
 
     if override_dtype is not None:
         override_dtype = override_dtype.lower()
     dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
 
-    # Binary target: last column >= 0 → class 1, else 0
-    TSI = data[:, -1].reshape(-1, 1)
-    TSI = (TSI >= 0).astype(int)
+    # # Binary target: last column >= 0 → class 1, else 0
+    # TSI = data[:, -1].reshape(-1, 1)
+    # TSI = (TSI >= 0).astype(int)
 
-    data = data[:, :-1]
+    # data = data[:, :-1]
 
     model = CNN1D().double()
     
@@ -770,26 +772,27 @@ def load_CNNmodel(Model_Path, data_record, model_type,
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = model_type
+    Surrogate['model_type'] = "CNN"
     Surrogate['active_gen_only'] = active_gen_only
 
-    return Surrogate, data, TSI
+    # return Surrogate, data, TSI
+    return Surrogate
 
 def load_CNNmodel_SiLU(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
-    data = scio.loadmat(data_record)
-    data = data['Data']
+    # data = scio.loadmat(data_record)
+    # data = data['Data']
 
     if override_dtype is not None:
         override_dtype = override_dtype.lower()
     dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
 
-    # Binary target: last column >= 0 → class 1, else 0
-    TSI = data[:, -1].reshape(-1, 1)
-    TSI = (TSI >= 0).astype(int)
+    # # Binary target: last column >= 0 → class 1, else 0
+    # TSI = data[:, -1].reshape(-1, 1)
+    # TSI = (TSI >= 0).astype(int)
 
-    data = data[:, :-1]
+    # data = data[:, :-1]
 
     model = CNN1D_SiLU().double()
     # model = CNN1D_SiLU()
@@ -800,26 +803,27 @@ def load_CNNmodel_SiLU(Model_Path, data_record, model_type,
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = model_type
+    Surrogate['model_type'] = "CNN"
     Surrogate['active_gen_only'] = active_gen_only
 
-    return Surrogate, data, TSI
+    # return Surrogate, data, TSI
+    return Surrogate
 
 def load_CNNmodel_GELU(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
-    data = scio.loadmat(data_record)
-    data = data['Data']
+    # data = scio.loadmat(data_record)
+    # data = data['Data']
 
     if override_dtype is not None:
         override_dtype = override_dtype.lower()
     dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
 
-    # Binary target: last column >= 0 → class 1, else 0
-    TSI = data[:, -1].reshape(-1, 1)
-    TSI = (TSI >= 0).astype(int)
+    # # Binary target: last column >= 0 → class 1, else 0
+    # TSI = data[:, -1].reshape(-1, 1)
+    # TSI = (TSI >= 0).astype(int)
 
-    data = data[:, :-1]
+    # data = data[:, :-1]
 
     model = CNN1D_GELU().double()
     
@@ -829,26 +833,27 @@ def load_CNNmodel_GELU(Model_Path, data_record, model_type,
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = model_type
+    Surrogate['model_type'] = "CNN"
     Surrogate['active_gen_only'] = active_gen_only
 
-    return Surrogate, data, TSI
+    # return Surrogate, data, TSI
+    return Surrogate
 
 def load_CNNmodel_Sig(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
-    data = scio.loadmat(data_record)
-    data = data['Data']
+    # data = scio.loadmat(data_record)
+    # data = data['Data']
 
     if override_dtype is not None:
         override_dtype = override_dtype.lower()
     dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
 
-    # Binary target: last column >= 0 → class 1, else 0
-    TSI = data[:, -1].reshape(-1, 1)
-    TSI = (TSI >= 0).astype(int)
+    # # Binary target: last column >= 0 → class 1, else 0
+    # TSI = data[:, -1].reshape(-1, 1)
+    # TSI = (TSI >= 0).astype(int)
 
-    data = data[:, :-1]
+    # data = data[:, :-1]
 
     model = CNN1D_Sigmoid().double()
     
@@ -858,26 +863,27 @@ def load_CNNmodel_Sig(Model_Path, data_record, model_type,
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = model_type
+    Surrogate['model_type'] = "CNN"
     Surrogate['active_gen_only'] = active_gen_only
 
-    return Surrogate, data, TSI
+    # return Surrogate, data, TSI
+    return Surrogate
 
 def load_CNNmodel_Tanh(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
-    data = scio.loadmat(data_record)
-    data = data['Data']
+    # data = scio.loadmat(data_record)
+    # data = data['Data']
 
     if override_dtype is not None:
         override_dtype = override_dtype.lower()
     dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
 
-    # Binary target: last column >= 0 → class 1, else 0
-    TSI = data[:, -1].reshape(-1, 1)
-    TSI = (TSI >= 0).astype(int)
+    # # Binary target: last column >= 0 → class 1, else 0
+    # TSI = data[:, -1].reshape(-1, 1)
+    # TSI = (TSI >= 0).astype(int)
 
-    data = data[:, :-1]
+    # data = data[:, :-1]
 
     model = CNN1D_Tanh().double()
     
@@ -887,39 +893,42 @@ def load_CNNmodel_Tanh(Model_Path, data_record, model_type,
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = model_type
+    Surrogate['model_type'] = "CNN"
     Surrogate['active_gen_only'] = active_gen_only
 
-    return Surrogate, data, TSI
+    # return Surrogate, data, TSI
+    return Surrogate
 
 def load_CNNmodel_Soft(Model_Path, data_record, model_type,
     override_dtype: Optional[str] = "float64", active_gen_only = True):
     warnings.filterwarnings("ignore")
-    data = scio.loadmat(data_record)
-    data = data['Data']
+    # data = scio.loadmat(data_record)
+    # data = data['Data']
 
     if override_dtype is not None:
         override_dtype = override_dtype.lower()
     dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
 
-    # Binary target: last column >= 0 → class 1, else 0
-    TSI = data[:, -1].reshape(-1, 1)
-    TSI = (TSI >= 0).astype(int)
+    # # Binary target: last column >= 0 → class 1, else 0
+    # TSI = data[:, -1].reshape(-1, 1)
+    # TSI = (TSI >= 0).astype(int)
 
-    data = data[:, :-1]
+    # data = data[:, :-1]
 
     model = CNN1D_Softplus().double()
     
     state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
+
     model.load_state_dict(state_dict)
 
     Surrogate = {}
     Surrogate['model'] = model
     Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = model_type
+    Surrogate['model_type'] = "CNN"
     Surrogate['active_gen_only'] = active_gen_only
 
-    return Surrogate, data, TSI
+    # return Surrogate, data, TSI
+    return Surrogate
 
 def load_GPmodel(Model_Path, data_record, model_type,  active_gen_only = True):
     batch_size = 500  # Size of minibatch
@@ -998,7 +1007,8 @@ def load_GPmodel(Model_Path, data_record, model_type,  active_gen_only = True):
     TSI = TSI.numpy()
     TSI = TSI.min(1)
 
-    return GPmodel, data, TSI
+    # return GPmodel, data, TSI
+    return GPmodel
 
 # =========================
 # Main API you call: load_DKLmodel
@@ -1043,4 +1053,5 @@ def load_DKLmodel(Model_Path: str, data_record, model_type, active_gen_only = Tr
         "model_type": model_type
     }
 
-    return DKLmodel, X_raw_all, y_raw_all
+    # return DKLmodel, X_raw_all, y_raw_all
+    return DKLmodel

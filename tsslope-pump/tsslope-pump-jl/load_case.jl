@@ -49,7 +49,14 @@ function load_case_general(psd::SCACOPFdata, pf_file::String, gen_type::Union{No
     all_G_idx = gen[!, :I]
 
     # Find the indices of the active generators within all the generators in python index
-    gen_idx = findall(in(active_G_idx), all_G_idx) .-1
+    # gen_idx = findall(in(active_G_idx), all_G_idx) .-1
+    map_idx = Dict(val => i for (i, val) in enumerate(all_G_idx))
+    gen_idx = [map_idx[val] - 1 for val in active_G_idx]
+
+    # println("$(length(active_G_idx)), $(length(all_G_idx)), $(length(gen_idx))")
+    # println(active_G_idx)
+    # println(all_G_idx)
+    # println(gen_idx)
   
     # The changes that needed to be made so pl and ql to work with surrogate
     PL = loads[!, :PL] .* 0.01

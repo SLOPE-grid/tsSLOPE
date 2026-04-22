@@ -11,6 +11,8 @@ import time
 
 
 def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
+    # print("In Hessian")
+    # print(Surrogate['model_type'])
     if Surrogate['model_type'] == "CNF":
         return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "CNN":
@@ -103,6 +105,7 @@ def d2TSI_dV2dP2_CNF(CNFmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     return H
 
 def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
+    # print("In CNN Hessian")
 
     model = CNNmodel["model"]
     dtype = CNNmodel['dtype'] 
@@ -121,6 +124,9 @@ def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
     if active_gen_only:
         pg = torch.tensor(Pg[gen_idx], dtype=dtype, requires_grad=True)
+        # print("Length of gen_idx = ", len(gen_idx))
+        # print("Length of pg = ", len(pg))
+        # print(pg)
     else:
         pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
 

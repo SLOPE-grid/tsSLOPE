@@ -13,6 +13,8 @@ function TSIConstraint(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
   gen_idx = st_args["gen_idx"] .+1
   total_num_gen = st_args["numb_gen"]
 
+  # print("gen_idx = $(length(gen_idx)), total_num_gen = $total_num_gen, pg = $(length(pg))")
+
   PG_full = zeros(total_num_gen)
   QG_full = zeros(total_num_gen)  
   PG_full[gen_idx] = pg
@@ -141,7 +143,7 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   return Float64.(hess)
 end
 
-function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse",   = nothing)
+function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse", Mel = nothing)
 
   # Call Python function via PyCall
   tsilib = ret_tsilib()

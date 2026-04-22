@@ -17,7 +17,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
 
     opt = optimizer_with_attributes(Ipopt.Optimizer,
                                     "sb" => "yes",
-                                    # "linear_solver" => "ma57",
+                                    "linear_solver" => "ma57",
                                     "max_iter" =>  max_iter,
                                     # "print_timing_statistics" => "yes",
                                     # "print_level" => 10,
@@ -112,7 +112,9 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
     if Surrogate["model_type"] != nothing
         N_gen = st_args["numb_active_gen"]
 
+
         function tsif(args...)
+            # print("Length x = $(length(args)), Number of generators: $N_gen\n")
             pg_vec = collect(args[1:N_gen])
             qg_vec = collect(args[N_gen+1:2*N_gen])
 

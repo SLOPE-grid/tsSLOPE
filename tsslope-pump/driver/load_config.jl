@@ -118,6 +118,7 @@ CNN_Tanh_UQ_3_model_path =  "../../tsslope-ml/Models_parameters_new_data/CNN1D_T
 CNN_Tanh_UQ_4_model_path =  "../../tsslope-ml/Models_parameters_new_data/CNN1D_Tanh_seed_9003_set_UQ_acc_0.96797_auc_0.98844.pth"
 CNN_Tanh_UQ_5_model_path =  "../../tsslope-ml/Models_parameters_new_data/CNN1D_Tanh_seed_9004_set_UQ_acc_0.96697_auc_0.99552.pth"
 
+CNN_Soft_7k_model_path =  "../../tsslope-ml/CNN1D_Softplus_7k_test.pth"
 
 
 case_path = "../../example/ACTIVSg500"

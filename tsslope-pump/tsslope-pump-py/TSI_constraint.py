@@ -12,8 +12,11 @@ def TSI_constraint(Surrogate, Pg, Qg, st_args):
         return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
     elif Surrogate['model_type'] == "DKL":
         return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
-    else:
-        return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
+    else:        
+        if st_args['reorder_pg']:
+            return TSI_constraint_CNN_Reorder_pg(Surrogate, Pg, Qg, st_args)
+        else:
+            return TSI_constraint_CNN(Surrogate, Pg, Qg, st_args)
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """
@@ -115,6 +118,49 @@ def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
     X = torch.tensor(X_np, dtype=dtype).unsqueeze(0)
 
     pred = model(X).item()
+
+    return pred
+
+def TSI_constraint_CNN_Reorder_pg(Surrogate, Pg, Qg, st_args):
+    model = Surrogate['model']
+    dtype = Surrogate['dtype'] 
+    active_gen_only = Surrogate['active_gen_only']
+    gen_idx = st_args['gen_idx']
+    syn_idx = st_args['syn_idx']
+    rew_idx = st_args['rew_idx']
+
+    model.eval()
+
+    PL = st_args['PL']
+    QL = st_args['QL']
+
+    # print(f"PL = {PL.tolist()}")
+
+    if active_gen_only:
+        syn_idx_use = gen_idx[syn_idx]
+        rew_idx_use = gen_idx[rew_idx]
+    else:
+        rew_idx_use = rew_idx
+        syn_idx_use = np.setdiff1d(np.arange(len(Pg)), rew_idx_use)
+
+    # print(f"Pg_active_syn_idx = {Pg[syn_idx_use].tolist()}")
+    # print(f"Pg_active_rew_idx = {Pg[rew_idx_use].tolist()}")
+
+    Pg_input = np.hstack([
+        Pg[rew_idx_use].reshape(1, -1),
+        Pg[syn_idx_use].reshape(1, -1)
+    ])
+
+    Pl_input = PL.reshape(1, -1)
+    Ql_input = QL.reshape(1, -1)
+
+    X_np = np.hstack([Pg_input, Pl_input])
+
+    X = torch.tensor(X_np, dtype=dtype).unsqueeze(0)
+
+    X_scaled = X * 100
+
+    pred = model(X_scaled).item()
 
     return pred
 
@@ -264,11 +310,14 @@ def TSI_constraint_DKL(GPmodel, Pg, Qg, st_args):
     Pl = st_args['PL']
     Ql = st_args['QL']
 
+    print(f"Pl = {Pl}")
+
     if active_gen_only:
         active_syn_idx = list(set(syn_idx) & set(gen_idx))
         active_rew_idx = list(set(rew_idx) & set(gen_idx))
         Pg_active_syn_idx = Pg[active_syn_idx].reshape(1, -1)
         Pg_active_rew_idx = Pg[active_rew_idx].reshape(1, -1)
+
         # Qg_active_syn_idx = Qg[active_syn_idx].reshape(1, -1)
         # Qg_active_rew_idx = Qg[active_rew_idx].reshape(1, -1)
 

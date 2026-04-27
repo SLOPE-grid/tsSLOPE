@@ -70,8 +70,8 @@ function load_case_general(psd::SCACOPFdata, pf_file::String, gen_type::Union{No
 
     if gen_type !== nothing
         data = matread(gen_type)
-        syn_idx = data["gen_syn_Genidx"]
-        rew_idx = data["gen_rew_Genidx"]
+        syn_idx = data["gen_syn_Genidx"][1, :]
+        rew_idx = data["gen_rew_Genidx"][1, :]
 
         st_args = Dict(
             "gen_idx" => gen_idx,
@@ -86,6 +86,7 @@ function load_case_general(psd::SCACOPFdata, pf_file::String, gen_type::Union{No
             "beta" => beta,
             "syn_idx" => syn_idx,
             "rew_idx" => rew_idx,
+            "reorder_pg" => true,
             # "Mul_confi" => 0.0,
         )
     else    
@@ -100,6 +101,7 @@ function load_case_general(psd::SCACOPFdata, pf_file::String, gen_type::Union{No
             "num_J_H" => 0,
             "Mul_confi" => Mul_confi,
             "beta" => beta,
+            "reorder_pg" => false,
             # "Mul_confi" => 0.0,
         )
     end

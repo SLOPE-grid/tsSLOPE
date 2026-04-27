@@ -121,8 +121,6 @@ def SR1_spar_Sparse(B0, s, y, top_idx):
     # Sparse low-rank SR1 update
     B_til = B0 + Q_til @ np.diag(w) @ Q_til.T
 
-    # print(f"Number of nonzeros {np.count_nonzero(B_til)}\n")
-
     return B_til
 
 def hess_approx(B, S, Y, approx_type="Sparse", top_indices = [], Mel = 10):
@@ -140,9 +138,6 @@ def hess_approx(B, S, Y, approx_type="Sparse", top_indices = [], Mel = 10):
             return SR1_spar_Sparse(B, S, Y, top_indices)
 
     elif approx_type == "Sparse_pattern":
-        # if Mel != None:
-        #     return find_sparse_pattern(B, S, Y, 10)
-        # else:
         return find_sparse_pattern(B, S, Y, Mel)
 
     else:

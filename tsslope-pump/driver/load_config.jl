@@ -123,6 +123,7 @@ CNN_Soft_7k_model_path =  "../../tsslope-ml/CNN1D_Softplus_7k_test.pth"
 
 case_path = "../../example/ACTIVSg500"
 Texas_case_path = "../../example/Texas7k"
+Texas_old_case_path = "../../example/Texas7k_old"
 
 case_sol_path = "./output"
 

@@ -23,6 +23,7 @@ function TSIConstraint(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
   # Call the Python function
   tsilib = ret_tsilib() 
   TSI_f = tsilib.eval_tsi_f(Surrogate, PG_full, QG_full, st_args)
+  println("TSI= $(Float64(TSI_f[1]))")
 
   return Float64(TSI_f[1])
 end
@@ -40,6 +41,8 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
   nl = st_args["numb_loads"]
 
   gen_idx = st_args["gen_idx"] .+1
+  syn_idx = st_args["syn_idx"] .+1
+  rew_idx = st_args["rew_idx"] .+1
   PG_full = zeros(total_num_gen)
   QG_full = zeros(total_num_gen)
   PG_full[gen_idx] = pg
@@ -52,31 +55,48 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
   # extract gradient infomation just for active generators
   grad = zeros(2 * num_active_gen)
 
-  # check if the gradient is with respect to just pg or both pg qg
-  if length(dTSI) == total_num_gen 
-    # gradient wrt [pg]
-    grad[1:num_active_gen] = dTSI[gen_idx]
-  elseif length(dTSI) == num_active_gen 
+
+  if st_args["reorder_pg"]
+    # if length(dTSI) == total_num_gen 
+    #   grad_temp = zeros(num_active_gen)
+    #   grad_temp[rew_idx] = dTSI[1:len(rew_idx)]
+    #   grad_temp[syn_idx] = dTSI[1:len(syn_idx).+len(rew_idx)]
+    #   # gradient wrt [pg]
+    #   grad[1:num_active_gen] = dTSI[gen_idx]
+    # elseif length(dTSI) == num_active_gen 
+    grad_temp = zeros(num_active_gen)
+    grad_temp[rew_idx] = dTSI[1:length(rew_idx)]
+    grad_temp[syn_idx] = dTSI[(1:length(syn_idx)).+length(rew_idx)]
     # gradient wrt [pg_active]
-    grad[1:num_active_gen] = dTSI
-  elseif length(dTSI) == 2*total_num_gen
-    # gradient wrt [pg qg]
-    grad[1:num_active_gen] = dTSI[gen_idx]
-    grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+num_active_gen]
-  elseif length(dTSI) == 2*num_active_gen
-    # gradient wrt [pg_active qg_active]
-    grad[1:num_active_gen] = dTSI[1:num_active_gen]
-    grad[1+num_active_gen:2*num_active_gen] = dTSI[(1:num_active_gen).+num_active_gen]
-  elseif length(dTSI) == 2 * total_num_gen + 2 * nl 
-    # gradient wrt [pg pl qg ql]
-    numb_gen_loads = total_num_gen + nl 
-    grad[1:num_active_gen] = dTSI[gen_idx]
-    grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+ numb_gen_loads]
+    grad[1:num_active_gen] = grad_temp
+    # end
   else
-    # gradient wrt [pg_active pl qg_active ql]
-    numb_gen_loads = num_active_gen + nl 
-    grad[1:num_active_gen] = dTSI[1:num_active_gen]
-    grad[1+num_active_gen:2*num_active_gen] = dTSI[(1:num_active_gen).+ numb_gen_loads]
+    # check if the gradient is with respect to just pg or both pg qg
+    if length(dTSI) == total_num_gen 
+      # gradient wrt [pg]
+      grad[1:num_active_gen] = dTSI[gen_idx]
+    elseif length(dTSI) == num_active_gen 
+      # gradient wrt [pg_active]
+      grad[1:num_active_gen] = dTSI
+    elseif length(dTSI) == 2*total_num_gen
+      # gradient wrt [pg qg]
+      grad[1:num_active_gen] = dTSI[gen_idx]
+      grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+num_active_gen]
+    elseif length(dTSI) == 2*num_active_gen
+      # gradient wrt [pg_active qg_active]
+      grad[1:num_active_gen] = dTSI[1:num_active_gen]
+      grad[1+num_active_gen:2*num_active_gen] = dTSI[(1:num_active_gen).+num_active_gen]
+    elseif length(dTSI) == 2 * total_num_gen + 2 * nl 
+      # gradient wrt [pg pl qg ql]
+      numb_gen_loads = total_num_gen + nl 
+      grad[1:num_active_gen] = dTSI[gen_idx]
+      grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+ numb_gen_loads]
+    else
+      # gradient wrt [pg_active pl qg_active ql]
+      numb_gen_loads = num_active_gen + nl 
+      grad[1:num_active_gen] = dTSI[1:num_active_gen]
+      grad[1+num_active_gen:2*num_active_gen] = dTSI[(1:num_active_gen).+ numb_gen_loads]
+    end
   end
 
   # if approx_type == "Sparse"
@@ -101,8 +121,10 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   total_num_gen = st_args["numb_gen"]
   num_active_gen = st_args["numb_active_gen"]
   nl = st_args["numb_loads"]
-
+  
   gen_idx = st_args["gen_idx"] .+1
+  syn_idx = st_args["syn_idx"] .+1
+  rew_idx = st_args["rew_idx"] .+1
   PG_full = zeros(st_args["numb_gen"])
   QG_full = zeros(st_args["numb_gen"])
   PG_full[gen_idx] = pg
@@ -114,30 +136,41 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
 
   # extract Hessian infomation just for active generators
   hess = zeros(2 * num_active_gen, 2 * num_active_gen)
-  if size(dTSI2)[1] == total_num_gen
-    # Hessian wrt [pg]
-    hess[1:num_active_gen, 1:num_active_gen] = dTSI2[gen_idx, gen_idx]
-  elseif size(dTSI2)[1] == num_active_gen
-    # Hessian wrt [pg_active]
-    hess[1:num_active_gen, 1:num_active_gen] = dTSI2
-  elseif size(dTSI2)[1] == 2*total_num_gen
-    # Hessian wrt [pg qg]
-    gen_idx_full = vcat(gen_idx, gen_idx .+ total_num_gen)
-    hess = dTSI2[gen_idx_full, gen_idx_full]
-  elseif size(dTSI2)[1] == 2*num_active_gen
-    # Hessian wrt [pg_active qg_active]
-    gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
-    hess = dTSI2[gen_idx_full, gen_idx_full]
-  elseif size(dTSI2)[1] == 2 * total_num_gen + 2 * nl 
-    # Hessian wrt [pg pl qg ql]
-    numb_gen_loads = total_num_gen + nl 
-    gen_idx_full = vcat(gen_idx, gen_idx .+ numb_gen_loads)
-    hess = dTSI2[gen_idx_full, gen_idx_full]
+
+  if st_args["reorder_pg"]
+    hess_temp = zeros(num_active_gen, num_active_gen)
+
+    syn_shift = (1:length(syn_idx)).+length(rew_idx)
+    hess_temp[rew_idx, rew_idx] = hess[1:length(rew_idx), 1:length(rew_idx)]
+    hess_temp[syn_idx, syn_idx] = hess[syn_shift, syn_shift]
+
+    hess[1:num_active_gen, 1:num_active_gen] = hess_temp
   else
-    # Hessian wrt [pg_active pl qg_active ql]
-    numb_gen_loads = num_active_gen + nl 
-    gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ numb_gen_loads)
-    hess = dTSI2[gen_idx_full, gen_idx_full]
+    if size(dTSI2)[1] == total_num_gen
+      # Hessian wrt [pg]
+      hess[1:num_active_gen, 1:num_active_gen] = dTSI2[gen_idx, gen_idx]
+    elseif size(dTSI2)[1] == num_active_gen
+      # Hessian wrt [pg_active]
+      hess[1:num_active_gen, 1:num_active_gen] = dTSI2
+    elseif size(dTSI2)[1] == 2*total_num_gen
+      # Hessian wrt [pg qg]
+      gen_idx_full = vcat(gen_idx, gen_idx .+ total_num_gen)
+      hess = dTSI2[gen_idx_full, gen_idx_full]
+    elseif size(dTSI2)[1] == 2*num_active_gen
+      # Hessian wrt [pg_active qg_active]
+      gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
+      hess = dTSI2[gen_idx_full, gen_idx_full]
+    elseif size(dTSI2)[1] == 2 * total_num_gen + 2 * nl 
+      # Hessian wrt [pg pl qg ql]
+      numb_gen_loads = total_num_gen + nl 
+      gen_idx_full = vcat(gen_idx, gen_idx .+ numb_gen_loads)
+      hess = dTSI2[gen_idx_full, gen_idx_full]
+    else
+      # Hessian wrt [pg_active pl qg_active ql]
+      numb_gen_loads = num_active_gen + nl 
+      gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ numb_gen_loads)
+      hess = dTSI2[gen_idx_full, gen_idx_full]
+    end
   end
 
   return Float64.(hess)

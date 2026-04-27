@@ -15,12 +15,11 @@ include(string(jl_lib,"/tsi_constraints.jl"))
 
 test_problem = case_path
 test_problem = Texas_case_path
-# test_problem = Texas_old_case_path
 
-if test_problem == case_path
-    gen_type = nothing
-else
+if test_problem == Texas_case_path
     gen_type = gen_type_7k_file
+else
+    gen_type = nothing
 end
 
 println("Reading instance from "*test_problem*" ... ")
@@ -30,7 +29,7 @@ active_gen_only = true
 
 model_type = "CNF"
 model_type = "CNN_Soft"
-model_type = "None"
+# model_type = "None"
 
 max_iter = 300
 
@@ -44,11 +43,8 @@ t0 = time()
 
 Hess_approx = true
 
-# if Hess_approx is false the following parameters are not used
 gamma = 0.
 r = 6
-
-diag_pattern = true
 
 gamma_update = false
 
@@ -56,7 +52,7 @@ approx_type = "Sparse"
 # approx_type = "Limited"
 # approx_type = "Full"
 
-if test_problem == Texas_case_path || test_problem == Texas_old_case_path
+if test_problem == Texas_case_path
     surrogate_path = CNN_Soft_7k_model_path
 elseif test_problem == case_path
     if model_type == "CNF"
@@ -76,7 +72,21 @@ end
 
 surrogate = tsslope_lib.load_model(surrogate_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
 
-num_iter, total_time, base_cost, Surr_Feasibility_margin, ter_status, norm_grad, pg =
+if approx_type == "Sparse"
+    _, _, _, _, _, _, _, warm_start =
+        TSACOPF(
+            test_problem,
+            case_sol_path,
+            pf_limit_file,
+            nothing,
+            psd,
+            tau,
+            max_iter = max_iter,
+            gen_type = gen_type, 
+            save_warm_start = true
+        )
+
+    num_iter, total_time, _, _, _, _, _ =
         TSACOPF(
             test_problem,
             case_sol_path,
@@ -91,5 +101,33 @@ num_iter, total_time, base_cost, Surr_Feasibility_margin, ter_status, norm_grad,
             r = r,
             gamma_update = gamma_update,
             gen_type = gen_type, 
-            diag_pattern = diag_pattern
+            diag_pattern = false,
+            warm_start = warm_start,
+            # Mel = Mel
         )
+
+
+else
+    num_iter, total_time, base_cost,
+    Surr_Feasibility_margin, ter_status, norm_grad, pg =
+        TSACOPF(
+            test_problem,
+            case_sol_path,
+            pf_limit_file,
+            surrogate,
+            psd,
+            tau,
+            max_iter = max_iter,
+            Hess_approx = Hess_approx,
+            gamma = gamma,
+            approx_type = approx_type,
+            r = r,
+            gamma_update = gamma_update,
+            gen_type = gen_type, 
+        )
+    push!(num_iters, num_iter)
+    push!(total_times, total_time)
+end
+
+println("Total time elapsed $(time() - t0)")
+

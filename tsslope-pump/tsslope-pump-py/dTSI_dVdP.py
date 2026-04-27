@@ -12,6 +12,11 @@ def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, st_args):
     if Surrogate['model_type'] == "CNF":
         return dTSI_dVdP_CNF(Surrogate, Pg, Qg, Pl, Ql, st_args)
     elif Surrogate['model_type'] == "CNN":
+        if st_args['reorder_pg']:
+            return dTSI_dVdP_CNN_Reorder_pg(Surrogate, Pg, Qg, Pl, Ql, st_args)
+        else:
+            return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    elif Surrogate['model_type'] == "CNN":
         return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
     else:
         return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
@@ -124,6 +129,48 @@ def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, st_args):
 
     model.eval()
     y = model(X_in).sum()
+    y.backward()
+
+    # gradient wrt pg are the first len(pg) components
+    grad_pg = X.grad[:len(pg)].clone()
+
+    return grad_pg.detach().cpu().numpy()
+
+
+# derivative of f(s) > tau
+def dTSI_dVdP_CNN_Reorder_pg(CNNmodel, Pg, Qg, Pl, Ql, st_args):
+
+    model = CNNmodel["model"]
+    dtype = CNNmodel['dtype'] 
+    active_gen_only = CNNmodel['active_gen_only']
+    gen_idx = st_args['gen_idx']
+    syn_idx = st_args['syn_idx']
+    rew_idx = st_args['rew_idx']
+
+    if active_gen_only:
+        syn_idx_use = gen_idx[syn_idx]
+        rew_idx_use = gen_idx[rew_idx]
+    else:
+        rew_idx_use = rew_idx
+        syn_idx_use = np.setdiff1d(np.arange(len(Pg)), rew_idx_use)
+
+    Pg_input = np.hstack([
+        Pg[rew_idx_use],
+        Pg[syn_idx_use]
+    ])
+
+    pg = torch.tensor(Pg_input, dtype=dtype)
+
+    pl = torch.tensor(Pl, dtype=dtype)   
+
+    X = torch.cat([pg, pl], dim=0).requires_grad_(True)
+
+    X_in = X.view(1, 1, -1)
+
+    X_scaled = 100 * X_in
+
+    model.eval()
+    y = model(X_scaled).sum()
     y.backward()
 
     # gradient wrt pg are the first len(pg) components

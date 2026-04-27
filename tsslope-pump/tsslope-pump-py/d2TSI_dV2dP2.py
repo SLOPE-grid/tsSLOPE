@@ -16,7 +16,10 @@ def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
     if Surrogate['model_type'] == "CNF":
         return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "CNN":
-        return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+        if st_args['reorder_pg']:
+            return d2TSI_dV2dP2_CNN_Reorder_pg(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+        else:
+            return d2TSI_dV2dP2_CNN(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif  Surrogate['model_type'] == "DKL":
         return d2TSI_dV2dP2_DKL(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
 
@@ -112,6 +115,7 @@ def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     active_gen_only = CNNmodel['active_gen_only']
     gen_idx = st_args['gen_idx']
 
+
     def model_scalar(pg_vector):
         pl_t = torch.tensor(Pl, dtype=dtype)
         ql_t = torch.tensor(Ql, dtype=dtype)
@@ -124,11 +128,50 @@ def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
     if active_gen_only:
         pg = torch.tensor(Pg[gen_idx], dtype=dtype, requires_grad=True)
-        # print("Length of gen_idx = ", len(gen_idx))
-        # print("Length of pg = ", len(pg))
-        # print(pg)
     else:
         pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
+
+    H = hessian(model_scalar, pg)
+
+    H = H.detach().cpu().numpy()
+
+    return H
+
+def d2TSI_dV2dP2_CNN_Reorder_pg(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
+    # print("In CNN Hessian")
+
+    model = CNNmodel["model"]
+    dtype = CNNmodel['dtype'] 
+    active_gen_only = CNNmodel['active_gen_only']
+    gen_idx = st_args['gen_idx']
+    syn_idx = st_args['syn_idx']
+    rew_idx = st_args['rew_idx']
+
+
+    def model_scalar(pg_vector):
+        pl_t = torch.tensor(Pl, dtype=dtype)
+
+        X = torch.cat([pg_vector.clone(), pl_t], dim=0)
+        X = X.unsqueeze(0).unsqueeze(0)
+
+        X_scaled = 100 * X
+
+        y = model(X_scaled)
+        return y.sum()    # must be scalar
+
+    if active_gen_only:
+        syn_idx_use = gen_idx[syn_idx]
+        rew_idx_use = gen_idx[rew_idx]
+    else:
+        rew_idx_use = rew_idx
+        syn_idx_use = np.setdiff1d(np.arange(len(Pg)), rew_idx_use)
+
+    Pg_input = np.hstack([
+        Pg[rew_idx_use],
+        Pg[syn_idx_use]
+    ])
+
+    pg = torch.tensor(Pg_input, dtype=dtype, requires_grad=True)
 
     H = hessian(model_scalar, pg)
 

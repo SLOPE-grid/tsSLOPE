@@ -96,7 +96,6 @@ function apply_warm_start!(m::JuMP.Model, ws::Dict; mu_init=1e-4)
         name = JuMP.name(v)
         if haskey(primal, name)
             JuMP.set_start_value(v, primal[name])
-            # println("$name = $(primal[name])")
         end
     end
 
@@ -109,7 +108,6 @@ function apply_warm_start!(m::JuMP.Model, ws::Dict; mu_init=1e-4)
 
             if haskey(duals, key)
                 JuMP.set_dual_start_value(con, duals[key])
-                # print("$(key) = $(duals[key])")
             end
         end
     end
@@ -161,8 +159,6 @@ function TSACOPF_No_Surrogate(instance_dir::String, solution_dir::String, pf_lim
 
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
-
-    println("m[:b_s]: $(m[:b_s])" )
 
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir=solution_dir)
     
@@ -890,9 +886,6 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
         push!(d.Y, y)
 
         if d.st_args["top_idx"] == 0 
-
-            # println("gamma_k = $gamma_k")
-    
             B = d.gamma_k[end] * d.I_gamma
 
         else
@@ -1047,8 +1040,6 @@ function build_moi_solver_with_TSI_mixed!(
     # -----------------------------------------------------
     # 5) Fix TSI sparsity pattern once
     # -----------------------------------------------------
-    # pg = x0[:p_g]
-    # qg = x0[:q_g]
     pg = JuMP.start_value.(m[:p_g])
     qg = JuMP.start_value.(m[:q_g])
 
@@ -1126,16 +1117,6 @@ function build_moi_solver_with_TSI_mixed!(
 
             S = SR1_hist["S"]
             Y = SR1_hist["Y"]
-
-            # S = Vector{Vector{Float64}}()
-            # Y = Vector{Vector{Float64}}()
-
-            # x_hist = SR1_hist["x"]
-            # g_hist = SR1_hist["grad"]
-            # for i = 1:length(x_hist)-1
-            #     push!(S, x_hist[i+1] - x_hist[i])
-            #     push!(Y, g_hist[i+1] - g_hist[i])
-            # end
         end
 
         rows_local, cols_local, top = TSIConstraintHessApprox(
@@ -1144,8 +1125,6 @@ function build_moi_solver_with_TSI_mixed!(
             S,
             Y,
             "Sparse_pattern",
-            # r,
-            # true
         )
 
         
@@ -1287,14 +1266,14 @@ function TSACOPF_sparse_Limited_Memory_SR1(
 )
     st_args = load_case(psd, pf_limit_file, Surrogate["model_type"], gen_type)
     st_args["tau"] = tau
-    t0 = time()
+    # t0 = time()
     x0 = get_primal_starting_point(psd)
-    println("Total time to make x0: $(time() - t0)")
+    # println("Total time to make x0: $(time() - t0)")
 
-    t0 = time()
+    # t0 = time()
     # Build JuMP ACOPF model
     m, model_data = create_basecase_model(psd, nothing, x0)
-    println("Total time to make JuMP model: $(time() - t0)")
+    # println("Total time to make JuMP model: $(time() - t0)")
 
     t0 = time()
     # Attach mixed NLP block
@@ -1316,7 +1295,7 @@ function TSACOPF_sparse_Limited_Memory_SR1(
         diag_pattern = diag_pattern,
         warm_start = warm_start
     )
-    println("Total time to make Mixed MOI $(time() - t0)")
+    # println("Total time to make Mixed MOI $(time() - t0)")
 
     # Solve
     MOI.optimize!(opt)
@@ -1330,10 +1309,6 @@ function TSACOPF_sparse_Limited_Memory_SR1(
         catch
             missing
         end
-
-    # println("num_iter = $num_iter, total_time = $total_time")
-
-    # println(mixed_eval.gamma_k)
 
     p_g_sol = get_primal_from_opt(opt, index_map, m[:p_g])
     q_g_sol = get_primal_from_opt(opt, index_map, m[:q_g])
@@ -1412,8 +1387,8 @@ function TSACOPF_sparse_Limited_Memory_SR1(
 
     norm_grad = dot(grad, grad)
 
-    println("done. Objective value: \$", round(base_cost, digits=1))
-		# ".\nWriting solution to "*solution_dir*" ... \n")
+    println("done. Objective value: \$", round(base_cost, digits=1) ".\nWriting solution to "*solution_dir*" ... \n")
+    
     if save_SR1_hist
         SR1_hist =  Dict{String, Vector{Vector{Float64}}}()
         SR1_hist["S"] = mixed_eval.S

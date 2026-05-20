@@ -38,7 +38,7 @@ def SR1_approx_Limited(B0, s, y):
 
     return B
 
-def find_sparse_pattern(B0, s, y, n = 10):
+def find_sparse_pattern(B0, s, y, n = 10, numb_rows = False):
     """
     Sparse block SR1 Hessian approximation.
     """
@@ -61,7 +61,10 @@ def find_sparse_pattern(B0, s, y, n = 10):
     U = Q @ UT
 
     # Sparsity level 
-    Mel = int(np.floor(np.sqrt(n * U.shape[0])))
+    if numb_rows:
+        Mel = int(n)
+    else:
+        Mel = int(np.floor(np.sqrt(n * U.shape[0])))
 
     # Select rows with largest 2-norm
     row_norms_sq = np.sum(U**2, axis=1)
@@ -112,7 +115,7 @@ def SR1_spar_Sparse(B0, s, y, top_idx):
 
     # Re-orthonormalize selected rows
     U_sub = U[top_idx, :]
-    Q_sub, _ = np.linalg.qr(U_sub, mode='reduced')
+    Q_sub, temp = np.linalg.qr(U_sub, mode='reduced')
 
     # Embed sparse basis
     Q_til = np.zeros_like(U)
@@ -123,7 +126,7 @@ def SR1_spar_Sparse(B0, s, y, top_idx):
 
     return B_til
 
-def hess_approx(B, S, Y, approx_type="Sparse", top_indices = [], Mel = 10):
+def hess_approx(B, S, Y, approx_type="Sparse", top_indices = [], Mel = 10, numb_rows = False):
 
     if approx_type == "Full":
         return SR1_approx_Full(B, S, Y)
@@ -138,7 +141,7 @@ def hess_approx(B, S, Y, approx_type="Sparse", top_indices = [], Mel = 10):
             return SR1_spar_Sparse(B, S, Y, top_indices)
 
     elif approx_type == "Sparse_pattern":
-        return find_sparse_pattern(B, S, Y, Mel)
+        return find_sparse_pattern(B, S, Y, Mel, numb_rows)
 
     else:
         if len(S) == 0:

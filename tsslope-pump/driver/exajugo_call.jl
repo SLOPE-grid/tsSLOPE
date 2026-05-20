@@ -87,6 +87,7 @@ function extract_warm_start(m::JuMP.Model)
 end
 
 function apply_warm_start!(m::JuMP.Model, ws::Dict; mu_init=1e-4)
+    println("Applying warm start.")
     primal = ws["primal"]
     duals  = ws["dual"]
 
@@ -95,6 +96,7 @@ function apply_warm_start!(m::JuMP.Model, ws::Dict; mu_init=1e-4)
         name = JuMP.name(v)
         if haskey(primal, name)
             JuMP.set_start_value(v, primal[name])
+            # println("$name = $(primal[name])")
         end
     end
 
@@ -107,6 +109,7 @@ function apply_warm_start!(m::JuMP.Model, ws::Dict; mu_init=1e-4)
 
             if haskey(duals, key)
                 JuMP.set_dual_start_value(con, duals[key])
+                # print("$(key) = $(duals[key])")
             end
         end
     end
@@ -115,6 +118,38 @@ function apply_warm_start!(m::JuMP.Model, ws::Dict; mu_init=1e-4)
     set_optimizer_attribute(m, "mu_init", 1e-4)
 
     return
+end
+
+function check_primal_warm_start(m::JuMP.Model, ws::Dict)
+    primal = ws["primal"]
+
+    nmatch = 0
+    nmiss = 0
+    maxdiff = 0.0
+    worst_name = ""
+
+    for v in JuMP.all_variables(m)
+        name = JuMP.name(v)
+
+        if haskey(primal, name)
+            nmatch += 1
+
+            sv = JuMP.start_value(v)
+            diff = abs(sv - primal[name])
+
+            if diff > maxdiff
+                maxdiff = diff
+                worst_name = name
+            end
+        else
+            nmiss += 1
+        end
+    end
+
+    # println("Matched primal starts: ", nmatch)
+    # println("Missing primal starts: ", nmiss)
+    # println("Max start mismatch: ", maxdiff)
+    # println("Worst variable: ", worst_name)
 end
 
 function TSACOPF_No_Surrogate(instance_dir::String, solution_dir::String, pf_limit_file::String, psd, opt, gen_type::Union{Nothing, String} = nothing, save_warm_start = false)
@@ -171,13 +206,12 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
 
 
         function tsif(args...)
-            # print("Length x = $(length(args)), Number of generators: $N_gen\n")
             pg_vec = collect(args[1:N_gen])
             qg_vec = collect(args[N_gen+1:2*N_gen])
 
             TSI = TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
 
-            println("TSI = $TSI")
+            # println("TSI = $TSI")
 
             # return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
             return TSI
@@ -203,15 +237,7 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
                 print_once2 = 0
                 for i = 1:2*N_gen
                     for j = 1:i
-                    #     if print_once < 3 & i ~= j
-                    #         println("Before, h[$i, $j] = $(h[i, j])")
-                    #         print_once += 1
-                    #     end     
-                        h[i, j] = h_cached[i, j]
-                    #     if print_once2 < 3 & i ~= j
-                    #         println("After, h[$i, $j] = $(h[i, j])")
-                    #         print_once2 += 1
-                    #     end                        
+                        h[i, j] = h_cached[i, j]                       
                     end
                 end
                 return
@@ -238,17 +264,8 @@ function TSACOPF_True_Surrogate_Hessian(instance_dir::String, solution_dir::Stri
                 print_once = 0
                 print_once2 = 0
                 for i = 1:2*N_gen
-                    for j = 1:i
-                        # if print_once < 3 & i ~= j
-                        #     println("Before, , h[$i, $j] = $(h[i, j])")
-                        #     print_once += 1
-                        # end     
+                    for j = 1:i   
                         h[i, j] = hess[i, j]
-                        # if print_once2 < 3 & i ~= j
-                        #     println("After, , h[$i, $j] = $(h[i, j])")
-                        #     print_once2 += 1
-                        # end 
-                        # h[i, j] = 0.
                     end
                 end
                 CACHE[hsh] = hess
@@ -443,6 +460,8 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 
     N_gen = st_args["numb_active_gen"]
 
+    # println("N_gen: $N_gen")
+
     # For SR1 Hessian approximation
     B0_eye = Matrix{Float64}(I, 2*N_gen, 2*N_gen)
     B0     = gamma * B0_eye
@@ -457,6 +476,8 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
     function tsif(args...)
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
+
+        # println("length of pg: $(length(pg_vec))")
 
         return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
     end
@@ -868,7 +889,7 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
 
         if d.st_args["top_idx"] == 0 
 
-            println("gamma_k = $gamma_k")
+            # println("gamma_k = $gamma_k")
     
             B = d.gamma_k[end] * d.I_gamma
 
@@ -891,7 +912,7 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
             end
         end
 
-        if length(d.S) > d.LMp
+        if length(d.S) >= d.LMp 
             popfirst!(d.S)
             popfirst!(d.Y)
         end
@@ -929,7 +950,8 @@ function build_moi_solver_with_TSI_mixed!(
     gamma_update::Bool = true,
     SR1_hist = nothing,
     Mel = nothing,
-    diag_pattern = false
+    diag_pattern = false,
+    warm_start::Union{Nothing,Dict}=nothing
 )
     src_backend = JuMP.backend(m)
 
@@ -937,6 +959,39 @@ function build_moi_solver_with_TSI_mixed!(
     # 1) Copy JuMP backend into destination optimizer
     # -----------------------------------------------------
     index_map = MOI.copy_to(opt, src_backend)
+
+    if warm_start !== nothing
+        primal = warm_start["primal"]
+    
+        for v in JuMP.all_variables(m)
+            name = JuMP.name(v)
+            if haskey(primal, name)
+                src_vi = JuMP.index(v)
+                dest_vi = index_map[src_vi]
+                MOI.set(opt, MOI.VariablePrimalStart(), dest_vi, primal[name])
+            end
+        end
+    
+        MOI.set(opt, MOI.RawOptimizerAttribute("warm_start_init_point"), "yes")
+        MOI.set(opt, MOI.RawOptimizerAttribute("mu_init"), 1e-4)
+
+        duals = warm_start["dual"]
+
+        for (F, S) in JuMP.list_of_constraint_types(m)
+            cons = JuMP.all_constraints(m, F, S)
+
+            for (i, con) in enumerate(cons)
+                key = (F, S, i)
+
+                if haskey(duals, key)
+                    src_ci = JuMP.index(con)
+                    dest_ci = index_map[src_ci]
+                    MOI.set(opt, MOI.ConstraintDualStart(), dest_ci, duals[key])
+                end
+            end
+        end
+    end
+    
 
     old_opt_block =
         try
@@ -973,9 +1028,6 @@ function build_moi_solver_with_TSI_mixed!(
         col = hess_sym_struct[k][2]
     end
 
-    # println("symbolic Jacobian nnz = ", length(jac_sym_struct))
-    # println("symbolic Hessian nnz = ", length(hess_sym_struct))
-
     # -----------------------------------------------------
     # 4) Recover p_g and q_g destination indices
     # -----------------------------------------------------
@@ -991,8 +1043,10 @@ function build_moi_solver_with_TSI_mixed!(
     # -----------------------------------------------------
     # 5) Fix TSI sparsity pattern once
     # -----------------------------------------------------
-    pg = x0[:p_g]
-    qg = x0[:q_g]
+    # pg = x0[:p_g]
+    # qg = x0[:q_g]
+    pg = JuMP.start_value.(m[:p_g])
+    qg = JuMP.start_value.(m[:q_g])
 
     # Dense TSI gradient layout in solver ordering
     bb_grad_cols = vcat(p_dest, q_dest)
@@ -1086,16 +1140,17 @@ function build_moi_solver_with_TSI_mixed!(
             S,
             Y,
             "Sparse_pattern",
-            Mel 
+            # r,
+            # true
         )
 
         
     end
+
     st_args["top_idx"] = top
 
     # Force lower-triangular canonical ordering
     for k in eachindex(rows_local)
-        # print(rows_local[k], cols_local[k])
         if rows_local[k] < cols_local[k]
             rows_local[k], cols_local[k] = cols_local[k], rows_local[k]
         end
@@ -1222,15 +1277,16 @@ function TSACOPF_sparse_Limited_Memory_SR1(
 )
     st_args = load_case(psd, pf_limit_file, Surrogate["model_type"], gen_type)
     st_args["tau"] = tau
+    t0 = time()
     x0 = get_primal_starting_point(psd)
+    println("Total time to make x0: $(time() - t0)")
 
+    t0 = time()
     # Build JuMP ACOPF model
     m, model_data = create_basecase_model(psd, nothing, x0)
+    println("Total time to make JuMP model: $(time() - t0)")
 
-    if warm_start !== nothing
-        apply_warm_start!(m, warm_start; mu_init=1e-4)
-    end
-
+    t0 = time()
     # Attach mixed NLP block
     index_map, src_backend, mixed_eval = build_moi_solver_with_TSI_mixed!(
         m,
@@ -1247,8 +1303,10 @@ function TSACOPF_sparse_Limited_Memory_SR1(
         gamma_update = gamma_update,
         SR1_hist = SR1_hist, 
         Mel = Mel,
-        diag_pattern = diag_pattern
+        diag_pattern = diag_pattern,
+        warm_start = warm_start
     )
+    println("Total time to make Mixed MOI $(time() - t0)")
 
     # Solve
     MOI.optimize!(opt)
@@ -1269,6 +1327,52 @@ function TSACOPF_sparse_Limited_Memory_SR1(
 
     p_g_sol = get_primal_from_opt(opt, index_map, m[:p_g])
     q_g_sol = get_primal_from_opt(opt, index_map, m[:q_g])
+
+    if solution_dir !== nothing
+        v_n_sol      = get_primal_from_opt(opt, index_map, m[:v_n])
+        theta_n_sol  = get_primal_from_opt(opt, index_map, m[:theta_n])
+
+        b_s = get_primal_from_opt(opt, index_map, m[:b_s])
+
+        p_li_sol = get_primal_from_opt(opt, index_map, m[:p_li])
+        q_li_sol = get_primal_from_opt(opt, index_map, m[:q_li])
+        p_ti_sol = get_primal_from_opt(opt, index_map, m[:p_ti])
+        q_ti_sol = get_primal_from_opt(opt, index_map, m[:q_ti])
+
+        pslackm_n_sol = get_primal_from_opt(opt, index_map, m[:pslackm_n])
+        pslackp_n_sol = get_primal_from_opt(opt, index_map, m[:pslackp_n])
+        qslackm_n_sol = get_primal_from_opt(opt, index_map, m[:qslackm_n])
+        qslackp_n_sol = get_primal_from_opt(opt, index_map, m[:qslackp_n])
+
+        sslack_li_sol = get_primal_from_opt(opt, index_map, m[:sslack_li])
+        sslack_ti_sol = get_primal_from_opt(opt, index_map, m[:sslack_ti])
+    
+        solution = BasecaseSolution(psd, v_n_sol, theta_n_sol,
+            convert(Vector{Float64}, b_s), p_g_sol, q_g_sol,
+            0.0, 0.0)
+
+        save_Mixed_MOI_outputs(
+            solution_dir,
+            psd,
+            solution;
+            v_n = v_n_sol,
+            theta_n = theta_n_sol,
+            p_li = p_li_sol,
+            q_li = q_li_sol,
+            p_ti = p_ti_sol,
+            q_ti = q_ti_sol,
+            b_s = b_s,
+            p_g = p_g_sol,
+            q_g = q_g_sol,
+            pslackm_n = pslackm_n_sol,
+            pslackp_n = pslackp_n_sol,
+            qslackm_n = qslackm_n_sol,
+            qslackp_n = qslackp_n_sol,
+            sslack_li = sslack_li_sol,
+            sslack_ti = sslack_ti_sol,
+        )
+    end
+    
 
     base_cost =
         try

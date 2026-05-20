@@ -16,10 +16,14 @@ def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, st_args):
             return dTSI_dVdP_CNN_Reorder_pg(Surrogate, Pg, Qg, Pl, Ql, st_args)
         else:
             return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
-    elif Surrogate['model_type'] == "CNN":
-        return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    elif  Surrogate['model_type'] == "DKL":
+        return dTSI_dVdP_DKL(Surrogate, Pg, Qg, Pl, Ql, st_args)
     else:
-        return dTSI_dVdP_CNN(Surrogate, Pg, Qg, Pl, Ql, st_args)
+        raise ValueError(
+            f"Gradient evaluation failed: the selected surrogate model "
+            f"({Surrogate['model_type']}) does not have an associated gradient function. "
+            f"Please implement the derivative or choose a compatible surrogate."
+        )
 
 def x_to_std(x: torch.Tensor, scaler, x_space: str) -> torch.Tensor:
     """
@@ -331,123 +335,83 @@ def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, st_args):
 
     return dTSI
 
+def dTSI_dVdP_DKL(GPmodel, Pg, Qg, Pl, Ql, st_args):
+    Mul_confi, gen_rewsyn_genidx = st_args['Mul_confi'], st_args['gen_rewsyn_genidx']
+    active_gen_only = GPmodel['active_gen_only']
+    syn_idx, rew_idx, gen_idx = st_args['syn_idx'], st_args['rew_idx'], st_args['gen_idx']
+    ng0 = len(gen_rewsyn_genidx)
 
-# from line_profiler_pycharm import profile
-# @profile
-# def dTSI_dVdP(GPmodel, Pg, Qg, Pl, Ql, st_args):
+    model = GPmodel['model']
+    likelihood = GPmodel['likelihood']
+    X_max = GPmodel['X_max']
+    X_min = GPmodel['X_min']
+    y_mean = GPmodel['y_mean']
+    y_std = GPmodel['y_std']
 
-#     nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
-#     num_J_H, Mul_confi, gen_rewsyn_genidx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_rewsyn_genidx']
-#     ng0 = len(gen_rewsyn_genidx)
+    model.eval()
+    likelihood.eval()
 
-#     model = GPmodel['model']
-#     likelihood = GPmodel['model']
-#     X_max = GPmodel['X_max']
-#     X_min = GPmodel['X_min']
-#     y_mean = GPmodel['y_mean']
-#     y_std = GPmodel['y_std']
+    Pl = st_args['PL']
+    Ql = st_args['QL']
 
-#     model.eval()
+    if active_gen_only:
+        # active_syn_idx = list(set(syn_idx) & set(gen_idx))
+        # active_rew_idx = list(set(rew_idx) & set(gen_idx))
+        active_syn_idx = gen_idx[syn_idx]
+        active_rew_idx = gen_idx[rew_idx]
+        Pg_active_syn = Pg[active_syn_idx].reshape(1, -1)
+        Pg_active_rew = Pg[active_rew_idx].reshape(1, -1)
 
-#     X = np.hstack([Pg, Pl]) 
-#     X = torch.autograd.Variable(torch.tensor(X).float(), requires_grad=True)
+        Pg_input = np.hstack([Pg_active_rew, Pg_active_syn])
+    else:
+        Pg_syn = Pg[syn_idx].reshape(1, -1)
+        Pg_rew = Pg[rew_idx].reshape(1, -1)
 
-#     if torch.cuda.is_available():
-#         model.cuda()
-#         X, X_max, X_min = X.cuda(), torch.tensor(X_max).cuda(), torch.tensor(X_min).cuda()
+        Pg_input = np.hstack([Pg_rew, Pg_syn])
 
-#     X = X - X_min
-#     X = 2.0 * (X / X_max) - 1.0
-#     X = torch.clamp(X, -1, 1)  # 限制极端值导致的零梯度
+    X = np.hstack([Pg_input.reshape(1, -1), Pl.reshape(1, -1)]) * 100
+    # X = np.hstack([Pg_input.reshape(1, -1), Pl.reshape(1, -1)])
+    X = torch.autograd.Variable(torch.tensor(X), requires_grad=True)
 
-#     def mean_f(X):
-#         return model.likelihood(model(X)).mean[0] # +y_mean和不加的梯度一致
+    # print("X_min.shape =", X_min.shape)
+    # print("X_max.shape =", X_max.shape)
 
-#     def std_f(X):
-#         return model.likelihood(model(X)).stddev[0]
+    # print("Pg shape =", np.shape(Pg))
+    # print("Qg shape =", np.shape(Qg))
+    # print("Pl shape =", np.shape(Pl))
+    # print("Ql shape =", np.shape(Ql))
 
-#     def mean_df(X):
-#         return torch.autograd.functional.jacobian(mean_f, X, create_graph=True).sum(0)
+    # print("active_gen_only =", active_gen_only)
+    # print("len(gen_idx) =", len(gen_idx))
+    # print("len(syn_idx) =", len(syn_idx))
+    # print("len(rew_idx) =", len(rew_idx))
 
-#     def std_df(X):
-#         return torch.autograd.functional.jacobian(std_f, X, create_graph=True).sum(0)
+    if torch.cuda.is_available():
+        model = model.cuda()
+        likelihood = likelihood.cuda()
+        X = X.cuda()
+        X_max = torch.tensor(X_max, dtype=torch.float64).cuda()
+        X_min = torch.tensor(X_min, dtype=torch.float64).cuda()
+    else:
+        X_max = torch.tensor(X_max, dtype=torch.float64)
+        X_min = torch.tensor(X_min, dtype=torch.float64)
 
-#     # full Jacobian
-#     Jacobian_mean = torch.autograd.functional.jacobian(mean_f, X)
-#     Jacobian_mean = Jacobian_mean * (y_std / (X_max/2.0))  # 从dy/dx转换为dY/dX
+    def constraint_f(X_in):
+        # print("X_in.shape  =", X_in.shape)
+        X_norm = X_in - X_min
+        X_norm = 2.0 * (X_norm / X_max) - 1.0
+        X_norm = torch.clamp(X_norm, -1.0, 1.0)
+        GPpre = likelihood(model(X_norm))
+        TSI_mean = GPpre.mean[0] * y_std + y_mean
+        TSI_std = GPpre.stddev[0] * y_std
+        return Mul_confi * TSI_std - TSI_mean  # means TSI_interval_half - TSI_mean < 0 
 
-#     Jacobian_std = torch.autograd.functional.jacobian(std_f, X)
-#     Jacobian_std = Jacobian_std * (y_std / (X_max/2.0))
+    Jacobian = torch.autograd.functional.jacobian(constraint_f, X)
+    Jacobian = Jacobian * (2.0 / X_max)   # chain rule: d/dX_raw
+    dTSI = Jacobian.detach().cpu().numpy().reshape(-1)
 
-#     Jacobian_mean_np = Jacobian_mean.cpu().detach().numpy()
-#     Jacobian_std_np = Jacobian_std.cpu().detach().numpy()
+    # print(f"dTSI shape: {dTSI.shape}")
 
-#     Jacobian_np = Mul_confi * Jacobian_std_np - Jacobian_mean_np
-
-#     return dTSI
-
-# def dTSI_dVdP(GPmodel, Pg, Qg, Pl, Ql, st_args):
-
-#     nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
-#     num_J_H, Mul_confi, gen_rewsyn_genidx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_rewsyn_genidx']
-#     ng0 = len(gen_rewsyn_genidx)
-
-#     model = GPmodel['model']
-#     likelihood = GPmodel['likelihood']
-#     X_max = GPmodel['X_max']
-#     X_min = GPmodel['X_min']
-#     y_mean = GPmodel['y_mean']
-#     y_std = GPmodel['y_std']
-
-#     model.eval()
-#     likelihood.eval()
-
-#     Pl = st_args['PL']
-#     Ql = st_args['QL']
-
-#     if active_gen_only:
-#         active_syn_idx = list(set(syn_idx) & set(gen_idx))
-#         active_rew_idx = list(set(rew_idx) & set(gen_idx))
-#         Pg_active_syn_idx = Pg[active_syn_idx].reshape(1, -1)
-#         Pg_active_rew_idx = Pg[active_rew_idx].reshape(1, -1)
-#         # Qg_active_syn_idx = Qg[active_syn_idx].reshape(1, -1)
-#         # Qg_active_rew_idx = Qg[active_rew_idx].reshape(1, -1)
-
-#         Pg_input = np.hstack([Pg_active_rew_idx, Pg_active_syn_idx])
-#         # Qg_input = np.hstack([Qg_active_rew_idx, Qg_active_syn_idx])
-#     else:
-#         Pg_syn_idx = Pg[syn_idx].reshape(1, -1)
-#         Pg_rew_idx = Pg[rew_idx].reshape(1, -1)
-#         Qg_syn_idx = Qg[syn_idx].reshape(1, -1)
-#         Qg_rew_idx = Qg[rew_idx].reshape(1, -1)
-
-#         Pg_input = np.hstack([Pg_rew_idx, Pg_syn_idx])
-#         # Qg_input = np.hstack([Qg_rew_idx, Qg_syn_idx])
-
-#     X = np.hstack([Pg_input, Pl])
-#     X = torch.autograd.Variable(torch.tensor(X).float(), requires_grad=True)
-
-#     if torch.cuda.is_available():
-#         model = model.cuda()
-#         likelihood = likelihood.cuda()
-#         X = X.cuda()
-#         X_max = torch.tensor(X_max, dtype=torch.float64).cuda()
-#         X_min = torch.tensor(X_min, dtype=torch.float64).cuda()
-#     else:
-#         X_max = torch.tensor(X_max, dtype=torch.float64)
-#         X_min = torch.tensor(X_min, dtype=torch.float64)
-
-#     X_norm = X - X_min
-#     X_norm = 2.0 * (X_norm / X_max) - 1.0
-#     X_norm = torch.clamp(X_norm, -1.0, 1.0)
-
-#     def constraint_f(X_in):
-#         GPpre = likelihood(model(X_in))
-#         TSI_mean = GPpre.mean[0] * y_std + y_mean
-#         TSI_std = GPpre.stddev[0] * y_std
-#         return Mul_confi * TSI_std - TSI_mean  # means TSI_interval_half - TSI_mean < 0 
-
-#     dTSI = torch.autograd.functional.jacobian(constraint_f, X_norm)
-#     dTSI = dTSI * (2.0 / X_max)   # chain rule: d/dX_raw
-
-#     return dTSI
+    # dTSI[0, gen_rewsyn_genidx] = dTSI[0, 0:ng0] # back to the normal order
+    # dTSI[0, ng0:] = -dTSI[0, ng0:] # for load shedding when load set as negative generator
+    return dTSI

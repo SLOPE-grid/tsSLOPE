@@ -162,6 +162,8 @@ function TSACOPF_No_Surrogate(instance_dir::String, solution_dir::String, pf_lim
 	# create model
     m, model_data = create_basecase_model(psd, opt, x0)
 
+    println("m[:b_s]: $(m[:b_s])" )
+
     solution, m = solve_basecase_from_model(m, psd, model_data, output_dir=solution_dir)
     
     total_time = MOI.get(m, MOI.SolveTimeSec())
@@ -953,6 +955,8 @@ function build_moi_solver_with_TSI_mixed!(
     diag_pattern = false,
     warm_start::Union{Nothing,Dict}=nothing
 )
+
+    println("m[:b_s]: $(m[:b_s])" )
     src_backend = JuMP.backend(m)
 
     # -----------------------------------------------------
@@ -1243,14 +1247,20 @@ end
 function get_primal_from_opt(
     opt,
     index_map,
-    xref::AbstractArray{JuMP.VariableRef},
+    xref,
 )
-    vals = similar(Float64.(zeros(size(xref))))
+    vals = zeros(Float64, size(xref))
+
+    if isempty(xref)
+        return vals
+    end
+
     for I in eachindex(xref)
         src_vi = JuMP.index(xref[I])
         dst_vi = index_map[src_vi]
         vals[I] = MOI.get(opt, MOI.VariablePrimal(), dst_vi)
     end
+
     return vals
 end
 

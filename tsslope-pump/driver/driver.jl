@@ -13,11 +13,11 @@ tsslope_lib = pyimport("tsslope-pump-py")
 jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/tsi_constraints.jl"))
 
-test_problem = case_path
-test_problem = Texas_case_path
-test_problem = Texas_old_case_path
+test_problem = ACTIVSg500_case_path
+#test_problem = Texas_case_path
+#test_problem = Texas_old_case_path
 
-if test_problem == case_path
+if test_problem == ACTIVSg500_case_path
     gen_type = nothing
 else
     gen_type = gen_type_7k_file
@@ -30,9 +30,9 @@ active_gen_only = true
 
 # model_type = "CNF"
 # model_type = "DKL_ReLU"
-model_type = "DKL_Soft"
+#model_type = "DKL_Soft"
 # model_type = "CNN_Soft"
-# model_type = "None"
+model_type = "None"
 
 max_iter = 300
 
@@ -58,6 +58,9 @@ gamma_update = false
 approx_type = "Limited"
 # approx_type = "Full"
 
+surrogate_path = nothing
+model_type = "None"
+approx_type = nothing
 if test_problem == Texas_case_path || test_problem == Texas_old_case_path
     if model_type == "DKL_ReLU"
         surrogate_path = DKL_ReLU_model_path
@@ -67,17 +70,13 @@ if test_problem == Texas_case_path || test_problem == Texas_old_case_path
         surrogate_path = CNN_Soft_7k_model_path
     end  
     data_path = DKL_train_xy_path
-elseif test_problem == case_path
+elseif test_problem == ACTIVSg500_case_path
     if model_type == "CNF"
         surrogate_path = CNF_model_final_path
     elseif model_type == "CNN_Soft"
         surrogate_path = CNN_Soft_UQ_1_model_path
     end
     data_path = LLNL_data_record
-else
-    surrogate_path = nothing
-    model_type = "None"
-    approx_type = nothing
 end   
 
 if Hess_approx == false

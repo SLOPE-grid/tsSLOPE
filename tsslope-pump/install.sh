@@ -6,7 +6,7 @@ export VENV=$CPATH/.pyenv
 
 rm -Rf $VENV
 
-python3.11 -m venv $VENV
+python -m venv $VENV
 
 source $VENV/bin/activate
 

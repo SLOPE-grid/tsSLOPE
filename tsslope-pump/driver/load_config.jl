@@ -1,5 +1,5 @@
 
-path_to_exajugo = "/usr/workspace/hiop/dane/project/scidac_2025/irabiel/WF_ACOPF/exajugo"
+path_to_exajugo = "/p/lustre1/hiop/project/scidac/exajugo"
 path_to_tsslope = "../../tsslope-pump"
 
 model_path =  "../../example/model_state_DSPP_500_0.990_0.884_28.9_9.0_4.2_20000_318.0_300_6_0.021_0.00075.pth"
@@ -123,7 +123,7 @@ CNN_Tanh_UQ_5_model_path =  "../../tsslope-ml/Models_parameters_new_data/CNN1D_T
 CNN_Soft_7k_model_path =  "../../tsslope-ml/CNN1D_Softplus_7k_test.pth"
 
 
-case_path = "../../example/ACTIVSg500"
+ACTIVSg500_case_path = "../../example/ACTIVSg500"
 Texas_case_path = "../../example/Texas7k"
 Texas_old_case_path = "../../example/Texas7k_old"
 

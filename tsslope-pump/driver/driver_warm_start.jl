@@ -14,7 +14,7 @@ jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/tsi_constraints.jl"))
 
 test_problem = case_path
-# test_problem = Texas_case_path
+test_problem = Texas_case_path
 # test_problem = Texas_old_case_path
 
 if test_problem == case_path
@@ -32,7 +32,7 @@ active_gen_only = true
 
 # model_type = "CNF"
 # model_type = "DKL_ReLU"
-# model_type = "DKL_Soft"
+model_type = "DKL_Soft"
 model_type = "CNN_Soft"
 # model_type = "None"
 

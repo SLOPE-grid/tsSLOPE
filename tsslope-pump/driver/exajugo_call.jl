@@ -1387,7 +1387,7 @@ function TSACOPF_sparse_Limited_Memory_SR1(
 
     norm_grad = dot(grad, grad)
 
-    println("done. Objective value: \$", round(base_cost, digits=1) ".\nWriting solution to "*solution_dir*" ... \n")
+    println("done. Objective value: \$", round(base_cost, digits=1), ".\nWriting solution to "*solution_dir*" ... \n")
     
     if save_SR1_hist
         SR1_hist =  Dict{String, Vector{Vector{Float64}}}()

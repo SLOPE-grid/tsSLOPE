@@ -75,7 +75,7 @@ else
     surrogate_path = nothing
 end
 
-surrogate, data, TSI = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
+surrogate = tsslope_lib.load_model(CNF_model_final_path, LLNL_data_record, model_type, active_gen_only = active_gen_only)
 
 
 if approx_type == "Sparse"

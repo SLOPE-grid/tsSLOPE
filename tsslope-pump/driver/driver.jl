@@ -84,8 +84,6 @@ if Hess_approx == false
     approx_type = nothing
 end
 
-case_sol_path = "./output"
-
 println("The data drive: $data_path \n")
 
 println("The surrogate: $model_type and the path: $surrogate_path")

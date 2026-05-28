@@ -577,6 +577,8 @@ class CNN1D_Softplus(nn.Module):
         return self.net(x)
    
 def load_surrogate(Model_Path, data_record, model_type, active_gen_only = True):
+
+    print(f"model_type: {model_type}, Model_Path: {Model_Path}")
     
     if model_type == "CNN":
         return load_CNNmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)

@@ -1,10 +1,11 @@
-include("load_config.jl")
+include("/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-pump/driver/load_config.jl")
 
 using Pkg;
-Pkg.activate((path_to_exajugo))
+# Use the new env_julia project instead of exajugo
+Pkg.activate("/p/lustre1/hiop/project/scidac/env_julia")
 push!(LOAD_PATH, string(path_to_exajugo, "/modules"))
 
-include("exajugo_call.jl") 
+include("/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-pump/driver/exajugo_call.jl") 
 
 using PyCall
 pushfirst!(pyimport("sys")."path", path_to_tsslope)
@@ -13,11 +14,11 @@ tsslope_lib = pyimport("tsslope-pump-py")
 jl_lib = string(path_to_tsslope,"/tsslope-pump-jl")
 include(string(jl_lib,"/tsi_constraints.jl"))
 
-test_problem = case_path
+test_problem = ACTIVSg500_case_path
 test_problem = Texas_case_path
-# test_problem = Texas_old_case_path
+test_problem = Texas_old_case_path
 
-if test_problem == case_path
+if test_problem == ACTIVSg500_case_path
     gen_type = nothing
 else
     gen_type = gen_type_7k_file
@@ -32,7 +33,7 @@ active_gen_only = true
 
 # model_type = "CNF"
 # model_type = "DKL_ReLU"
-model_type = "DKL_Soft"
+# model_type = "DKL_Soft"
 model_type = "CNN_Soft"
 # model_type = "None"
 
@@ -66,13 +67,21 @@ if test_problem == Texas_case_path || test_problem == Texas_old_case_path
         surrogate_path = DKL_Soft_model_path
     elseif model_type == "CNN_Soft"
         surrogate_path = CNN_Soft_7k_model_path
+    else
+        surrogate_path = nothing
+        model_type = "None"
+        approx_type = nothing        
     end  
     data_path = DKL_train_xy_path
-elseif test_problem == case_path
+elseif test_problem == ACTIVSg500_case_path
     if model_type == "CNF"
         surrogate_path = CNF_model_final_path
     elseif model_type == "CNN_Soft"
         surrogate_path = CNN_Soft_UQ_1_model_path
+    else
+        surrogate_path = nothing
+        model_type = "None"
+        approx_type = nothing
     end
     data_path = LLNL_data_record
 else
@@ -121,8 +130,7 @@ if apply_warm_start
 
 
 else
-    num_iter, total_time, base_cost,
-    Surr_Feasibility_margin, ter_status, norm_grad, pg =
+    num_iter, total_time, _, _, _, _, _ =
         TSACOPF(
             test_problem,
             case_sol_path,
@@ -138,8 +146,6 @@ else
             gamma_update = gamma_update,
             gen_type = gen_type, 
         )
-    push!(num_iters, num_iter)
-    push!(total_times, total_time)
 end
 
 println("Total time elapsed $(time() - t0)")

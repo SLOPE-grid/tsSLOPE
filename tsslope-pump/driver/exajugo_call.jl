@@ -20,7 +20,7 @@ function TSACOPF(instance_dir::String, solution_dir::String, pf_limit_file::Stri
                                     "linear_solver" => "ma57",
                                     "ma57_pivot_order" => 2,
                                     "max_iter" =>  max_iter,
-                                    # "print_timing_statistics" => "yes",
+                                    "print_timing_statistics" => "no",
                                     # "print_level" => 10,
                                     )
 
@@ -458,8 +458,6 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
 
     N_gen = st_args["numb_active_gen"]
 
-    # println("N_gen: $N_gen")
-
     # For SR1 Hessian approximation
     B0_eye = Matrix{Float64}(I, 2*N_gen, 2*N_gen)
     B0     = gamma * B0_eye
@@ -474,8 +472,6 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
     function tsif(args...)
         pg_vec = collect(args[1:N_gen])
         qg_vec = collect(args[N_gen+1:2*N_gen])
-
-        # println("length of pg: $(length(pg_vec))")
 
         return TSIConstraint(psd, Surrogate, st_args, pg_vec, qg_vec)
     end
@@ -948,8 +944,6 @@ function build_moi_solver_with_TSI_mixed!(
     diag_pattern = false,
     warm_start::Union{Nothing,Dict}=nothing
 )
-
-    println("m[:b_s]: $(m[:b_s])" )
     src_backend = JuMP.backend(m)
 
     # -----------------------------------------------------
@@ -1147,9 +1141,6 @@ function build_moi_solver_with_TSI_mixed!(
     rows_global = idx_map[rows_local]
     cols_global = idx_map[cols_local]
 
-    # println("TSI Jacobian nnz = ", length(bb_grad_cols))
-    # println("TSI Hessian nnz = ", length(rows_local))
-
     # -----------------------------------------------------
     # 6) Build mixed evaluator
     # -----------------------------------------------------
@@ -1266,14 +1257,10 @@ function TSACOPF_sparse_Limited_Memory_SR1(
 )
     st_args = load_case(psd, pf_limit_file, Surrogate["model_type"], gen_type)
     st_args["tau"] = tau
-    # t0 = time()
     x0 = get_primal_starting_point(psd)
-    # println("Total time to make x0: $(time() - t0)")
 
-    # t0 = time()
     # Build JuMP ACOPF model
     m, model_data = create_basecase_model(psd, nothing, x0)
-    # println("Total time to make JuMP model: $(time() - t0)")
 
     t0 = time()
     # Attach mixed NLP block
@@ -1295,7 +1282,6 @@ function TSACOPF_sparse_Limited_Memory_SR1(
         diag_pattern = diag_pattern,
         warm_start = warm_start
     )
-    # println("Total time to make Mixed MOI $(time() - t0)")
 
     # Solve
     MOI.optimize!(opt)

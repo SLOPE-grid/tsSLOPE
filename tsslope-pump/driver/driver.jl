@@ -1,10 +1,11 @@
-include("load_config.jl")
+include("/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-pump/driver/load_config.jl")
 
 using Pkg;
-Pkg.activate((path_to_exajugo))
+# Use the new env_julia project instead of exajugo
+Pkg.activate("/p/lustre1/hiop/project/scidac/env_julia")
 push!(LOAD_PATH, string(path_to_exajugo, "/modules"))
 
-include("exajugo_call.jl") 
+include("/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-pump/driver/exajugo_call.jl") 
 
 using PyCall
 pushfirst!(pyimport("sys")."path", path_to_tsslope)

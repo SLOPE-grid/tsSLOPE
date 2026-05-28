@@ -373,19 +373,6 @@ def dTSI_dVdP_DKL(GPmodel, Pg, Qg, Pl, Ql, st_args):
     # X = np.hstack([Pg_input.reshape(1, -1), Pl.reshape(1, -1)])
     X = torch.autograd.Variable(torch.tensor(X), requires_grad=True)
 
-    # print("X_min.shape =", X_min.shape)
-    # print("X_max.shape =", X_max.shape)
-
-    # print("Pg shape =", np.shape(Pg))
-    # print("Qg shape =", np.shape(Qg))
-    # print("Pl shape =", np.shape(Pl))
-    # print("Ql shape =", np.shape(Ql))
-
-    # print("active_gen_only =", active_gen_only)
-    # print("len(gen_idx) =", len(gen_idx))
-    # print("len(syn_idx) =", len(syn_idx))
-    # print("len(rew_idx) =", len(rew_idx))
-
     if torch.cuda.is_available():
         model = model.cuda()
         likelihood = likelihood.cuda()
@@ -410,8 +397,4 @@ def dTSI_dVdP_DKL(GPmodel, Pg, Qg, Pl, Ql, st_args):
     Jacobian = Jacobian * (2.0 / X_max)   # chain rule: d/dX_raw
     dTSI = Jacobian.detach().cpu().numpy().reshape(-1)
 
-    # print(f"dTSI shape: {dTSI.shape}")
-
-    # dTSI[0, gen_rewsyn_genidx] = dTSI[0, 0:ng0] # back to the normal order
-    # dTSI[0, ng0:] = -dTSI[0, ng0:] # for load shedding when load set as negative generator
     return dTSI

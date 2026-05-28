@@ -22,10 +22,10 @@ function TSIConstraint(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg, qg)
 
   # Call the Python function
   tsilib = ret_tsilib() 
-  t0 = time()
+  # t0 = time()
   TSI_f = tsilib.eval_tsi_f(Surrogate, PG_full, QG_full, st_args)
-  println("Total time elapsed for TSI constraint: $(time() - t0)")
-  println("TSI= $(Float64(TSI_f[1]))")
+  # println("Total time elapsed for TSI constraint: $(time() - t0)")
+  # println("TSI= $(Float64(TSI_f[1]))")
 
   return Float64(TSI_f[1])
 end
@@ -50,9 +50,9 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
 
   # Call Python function via PyCall
   tsilib = ret_tsilib()
-  t0 = time()
+  # t0 = time()
   dTSI = tsilib.eval_tsi_g(Surrogate, PG_full, QG_full, PL, QL, st_args)
-  println("Total time elapsed for Grad TSI: $(time() - t0)")
+  # println("Total time elapsed for Grad TSI: $(time() - t0)")
 
   # extract gradient infomation just for active generators
   grad = zeros(2 * num_active_gen)
@@ -103,12 +103,6 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
     end
   end
 
-  # if approx_type == "Sparse"
-  #   idx = findall(!iszero, grad)
-  #   return Int.(idx), Float64.(grad[idx]), Float64.(grad)
-  # else
-  #   return Float64.(grad)
-  # end
   return Float64.(grad)
 end
 
@@ -191,9 +185,9 @@ function TSIConstraintHessApprox(st_args::Dict, B, S, Y, approx_type="Sparse", M
 
     # println("In Sparse")
     num_active_gen = st_args["numb_active_gen"]
-    t0 = time()
+    # t0 = time()
     dTSI2 = tsilib.eval_tsi_h_approx(B, S, Y, approx_type, st_args["top_idx"])
-    println("Total time elapsed for SR1 Hess TSI: $(time() - t0)")
+    # println("Total time elapsed for SR1 Hess TSI: $(time() - t0)")
 
     gen_idx_full = vcat(1:num_active_gen, (1:num_active_gen) .+ num_active_gen)
     hess = dTSI2[gen_idx_full, gen_idx_full]

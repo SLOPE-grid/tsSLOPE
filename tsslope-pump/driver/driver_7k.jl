@@ -86,7 +86,10 @@ warm_start = Dict{String, Any}(
 results_perb = Dict{Int, Dict{String, Dict{Int, NamedTuple}}}()
 
 t0 = time()
-rng = MersenneTwister(jobid)
+# Combine jobid and folder_st to create unique seed for each parallel task
+seed = jobid * 1000 + folder_st
+println("Random seed = $seed (jobid=$jobid, folder_start=$folder_st)")
+rng = MersenneTwister(seed)
 for j = 1:numb_runs
     psd_temp = deepcopy(psd)
 

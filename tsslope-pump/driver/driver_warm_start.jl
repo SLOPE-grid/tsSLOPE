@@ -38,7 +38,7 @@ model_type = "CNN_Soft"
 # model_type = "None"
 
 
-max_iter = 200
+max_iter = 500
 
 if model_type == "CNF"
     tau = 0.0

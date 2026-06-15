@@ -528,12 +528,23 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
                     B0_gamma = B0
                 end
 
-                push!(S, s)
-                push!(Y, y)
+                push!(S, copy(s))
+                push!(Y, copy(y))
                 popfirst!(x)
                 popfirst!(g)
 
-                hess = TSIConstraintHessApprox(st_args, B0_gamma, S, Y, approx_type)
+                try 
+                    hess = TSIConstraintHessApprox(st_args, B0_gamma, S, Y, approx_type)
+                catch err
+                    @warn "SR1 update crashed at iteration $k. Restarting SR1 memory." exception=(err, catch_backtrace())
+
+                    empty!(S)
+                    empty!(Y)
+
+                    push!(S, copy(s))
+                    push!(Y, copy(y))
+                    hess = TSIConstraintHessApprox(st_args, B0_gamma, S, Y, approx_type)
+                end
 
                 if length(S) > LMp
                     popfirst!(S)
@@ -888,13 +899,30 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
             # SR1 safeguard condition
             yBs = y - d.Bk[1] * s
             if abs(dot(s, yBs)) >= d.r_stop * norm(s) * norm(yBs)
-                B = TSI_g_bb_hess_values(
-                    d.st_args,
-                    d.gamma_k[end] * d.I_gamma,
-                    d.S,
-                    d.Y,
-                    "Sparse",
-                )
+                try 
+                    B = TSI_g_bb_hess_values(
+                        d.st_args,
+                        d.gamma_k[end] * d.I_gamma,
+                        d.S,
+                        d.Y,
+                        "Sparse",
+                    )
+                catch err
+                    @warn "SR1 update crashed at iteration $k. Restarting SR1 memory." exception=(err, catch_backtrace())
+
+                    empty!(d.S)
+                    empty!(d.Y)
+
+                    push!(d.S, copy(s))
+                    push!(d.Y, copy(y))
+                    B = TSI_g_bb_hess_values(
+                        d.st_args,
+                        d.gamma_k[end] * d.I_gamma,
+                        d.S,
+                        d.Y,
+                        "Sparse",
+                    )
+                end
                 push!(d.Bk, B)
                 popfirst!(d.Bk)
             else

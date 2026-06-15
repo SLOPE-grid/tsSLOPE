@@ -546,11 +546,11 @@ function TSACOPF_Limited_Memory_SR1(instance_dir::String, solution_dir::String, 
                     hess = TSIConstraintHessApprox(st_args, B0_gamma, S, Y, approx_type)
                 end
 
-                if length(S) > LMp
+                if length(S) >= LMp
                     popfirst!(S)
                     popfirst!(Y)
                 end
-                if length(x_storage) > LMp+1
+                if length(x_storage) >= LMp+1
                     popfirst!(x_storage)
                     popfirst!(g_storage)
                 end

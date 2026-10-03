@@ -9,8 +9,12 @@ import time
 
 def dTSI_dVdP(Surrogate, Pg, Qg, Pl, Ql, st_args):
 
+    # print(f"Computing dTSI_dVdP for model type: {Surrogate['model_type']} ...")
+
     if Surrogate['model_type'] == "CNF":
         return dTSI_dVdP_CNF(Surrogate, Pg, Qg, Pl, Ql, st_args)
+    elif Surrogate['model_type'] == "CNN_UQ":
+        return dTSI_dVdP_CNN_UQ(Surrogate, Pg, Qg, Pl, Ql, st_args)
     elif Surrogate['model_type'] == "CNN":
         if st_args['reorder_pg']:
             return dTSI_dVdP_CNN_Reorder_pg(Surrogate, Pg, Qg, Pl, Ql, st_args)
@@ -62,6 +66,7 @@ def constraint_value(
     t0 = time.time()
     F_u0 = model.cdf(y0, x_std).view(())       # scalar
     total_time = time.time() - t0
+    alpha = .9 # Remove this later
     # print(f"Total time to calculate model.cdf in gradient: {total_time}")
     c = (1.0 - alpha) - F_u0
     return c
@@ -111,35 +116,64 @@ def dTSI_dVdP_CNF(CNFmodel, Pg, Qg, Pl, Ql, st_args):
     return g.detach().cpu().numpy()
 
 # derivative of f(s) > tau
-def dTSI_dVdP_CNN(CNNmodel, Pg, Qg, Pl, Ql, st_args):
+def dTSI_dVdP_CNN(surrogate, Pg, Qg, Pl, Ql, st_args):
+    model = surrogate["model"]
+    dtype = surrogate.get("dtype", next(model.parameters()).dtype)
+    device = surrogate.get("device", next(model.parameters()).device)
+    active_gen_only = surrogate.get("active_gen_only", True)
+    use_half_columns = surrogate.get("use_half_columns", False)
 
-    model = CNNmodel["model"]
-    dtype = CNNmodel['dtype'] 
-    active_gen_only = CNNmodel['active_gen_only']
-    gen_idx = st_args['gen_idx']
-
-    # build full input vector as one differentiable tensor
     if active_gen_only:
-        pg = torch.tensor(Pg[gen_idx], dtype=dtype)
+        gen_idx = st_args["gen_idx"]
+        pg = torch.as_tensor(Pg[gen_idx], dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg[gen_idx], dtype=dtype, device=device).reshape(-1)
     else:
-        pg = torch.tensor(Pg, dtype=dtype)
+        pg = torch.as_tensor(Pg, dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg, dtype=dtype, device=device).reshape(-1)
 
-    pl = torch.tensor(Pl, dtype=dtype)
-    ql = torch.tensor(Ql, dtype=dtype)    
-
-    X = torch.cat([pg, pl, ql], dim=0).requires_grad_(True)
-
-    X_in = X.view(1, 1, -1)
+    pg = pg.detach().clone().requires_grad_(True)
+    if not use_half_columns:
+        qg = qg.detach().clone().requires_grad_(True)
+    pl = torch.as_tensor(Pl, dtype=dtype, device=device).reshape(-1)
+    if not use_half_columns:
+        ql = torch.as_tensor(Ql, dtype=dtype, device=device).reshape(-1)
 
     model.eval()
-    y = model(X_in).sum()
-    y.backward()
+    if use_half_columns:
+        x_raw = torch.cat([pg, pl], dim=0)
+    else:
+        x_raw = torch.cat([pg, pl, qg, ql], dim=0)
 
-    # gradient wrt pg are the first len(pg) components
-    grad_pg = X.grad[:len(pg)].clone()
+    if surrogate.get("normalize_inputs", False):
+        x_mean = surrogate.get("X_mean")
+        x_std = surrogate.get("X_std")
+        if x_mean is None or x_std is None:
+            raise RuntimeError(
+                "Surrogate says normalize_inputs=True, but X_mean/X_std are missing."
+            )
+        x_mean = x_mean.to(dtype=dtype, device=device).reshape(-1)
+        x_std = x_std.to(dtype=dtype, device=device).reshape(-1)
+        if x_raw.numel() != x_mean.numel() or x_raw.numel() != x_std.numel():
+            raise ValueError(
+                f"Input length {x_raw.numel()} does not match normalization stats "
+                f"({x_mean.numel()} means, {x_std.numel()} stds)."
+            )
+        x_raw = (x_raw - x_mean) / x_std
 
-    return grad_pg.detach().cpu().numpy()
+    probability = model(x_raw.view(1, 1, -1)).sum()
 
+    if use_half_columns:
+        grad_pg = torch.autograd.grad(
+            probability, pg, create_graph=False, retain_graph=False
+        )[0]
+        return grad_pg.detach().cpu().numpy()
+
+    grad_pg, grad_qg = torch.autograd.grad(
+        probability, (pg, qg), create_graph=False, retain_graph=False
+    )
+    return torch.cat([grad_pg, grad_qg], dim=0).detach().cpu().numpy()
 
 # derivative of f(s) > tau
 def dTSI_dVdP_CNN_Reorder_pg(CNNmodel, Pg, Qg, Pl, Ql, st_args):
@@ -226,6 +260,79 @@ def dTSI_dVdP_CNN_Grad_UQ(CNNmodel, Pg, Qg, Pl, Ql, st_args):
 
     return grad_pg.detach().cpu().numpy()
 
+def dTSI_dVdP_CNN_UQ(surrogate, Pg, Qg, Pl, Ql, st_args):
+    model = surrogate["model"]
+    dtype = surrogate.get("dtype", next(model.parameters()).dtype)
+    device = surrogate.get("device", next(model.parameters()).device)
+    active_gen_only = surrogate.get("active_gen_only", True)
+    use_half_columns = surrogate.get("use_half_columns", False)
+    Mul_confi = st_args['Mul_confi']
+
+    if active_gen_only:
+        gen_idx = st_args["gen_idx"]
+        pg = torch.as_tensor(Pg[gen_idx], dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg[gen_idx], dtype=dtype, device=device).reshape(-1)
+    else:
+        pg = torch.as_tensor(Pg, dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg, dtype=dtype, device=device).reshape(-1)
+
+    pg = pg.detach().clone().requires_grad_(True)
+    if not use_half_columns:
+        qg = qg.detach().clone().requires_grad_(True)
+    pl = torch.as_tensor(Pl, dtype=dtype, device=device).reshape(-1)
+    if not use_half_columns:
+        ql = torch.as_tensor(Ql, dtype=dtype, device=device).reshape(-1)
+
+    model.eval()
+    if use_half_columns:
+        x_raw = torch.cat([pg, pl], dim=0)
+    else:
+        x_raw = torch.cat([pg, pl, qg, ql], dim=0)
+
+    if surrogate.get("normalize_inputs", False):
+        x_mean = surrogate.get("X_mean")
+        x_std = surrogate.get("X_std")
+        if x_mean is None or x_std is None:
+            raise RuntimeError(
+                "Surrogate says normalize_inputs=True, but X_mean/X_std are missing."
+            )
+        x_mean = x_mean.to(dtype=dtype, device=device).reshape(-1)
+        x_std = x_std.to(dtype=dtype, device=device).reshape(-1)
+        if x_raw.numel() != x_mean.numel() or x_raw.numel() != x_std.numel():
+            raise ValueError(
+                f"Input length {x_raw.numel()} does not match normalization stats "
+                f"({x_mean.numel()} means, {x_std.numel()} stds)."
+            )
+        x_raw = (x_raw - x_mean) / x_std
+
+    mean_raw, var_raw = model(x_raw.view(1, 1, -1))
+    mean = mean_raw.sum()
+    std = torch.sqrt(var_raw.sum())
+    if surrogate.get("normalize_targets", False):
+        y_mean = surrogate.get("y_mean")
+        y_std = surrogate.get("y_std")
+        if y_mean is None or y_std is None:
+            raise RuntimeError(
+                "Surrogate says normalize_targets=True, but y_mean/y_std are missing."
+            )
+        mean = y_mean + y_std * mean
+        std = y_std * std
+    constraint = mean - Mul_confi * std
+
+    if use_half_columns:
+        grad_pg = torch.autograd.grad(
+            constraint, pg, create_graph=False, retain_graph=False
+        )[0]
+        return grad_pg.detach().cpu().numpy()
+
+    grad_pg, grad_qg = torch.autograd.grad(
+        constraint, (pg, qg), create_graph=False, retain_graph=False
+    )
+
+    return torch.cat([grad_pg, grad_qg], dim=0).detach().cpu().numpy()
+
 def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, st_args):
     nb, ng = st_args['numb_buses'], st_args['total_numb_gens']
     num_J_H, Mul_confi, gen_idx = st_args['num_J_H'], st_args['Mul_confi'], st_args['gen_idx']
@@ -236,6 +343,8 @@ def dTSI_dVdP_GP(GPmodel, Pg, Qg, Pl, Ql, st_args):
     X_min = GPmodel['X_min']
     y_mean = GPmodel['y_mean']
     y_std = GPmodel['y_std']
+    active_gen_only = GPmodel['active_gen_only']
+    syn_idx, rew_idx, gen_idx = st_args['syn_idx'], st_args['rew_idx'], st_args['gen_idx']
 
     model.eval()
 

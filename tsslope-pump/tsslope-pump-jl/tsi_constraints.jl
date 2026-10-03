@@ -59,6 +59,7 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
 
 
   if st_args["reorder_pg"]
+    # println("Reordering gradient for active generators ...")
     syn_idx = st_args["syn_idx"] .+1
     rew_idx = st_args["rew_idx"] .+1
     # if length(dTSI) == total_num_gen 
@@ -75,6 +76,7 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
     grad[1:num_active_gen] = grad_temp
     # end
   else
+    # println("Extracting gradient for active generators ...")
     # check if the gradient is with respect to just pg or both pg qg
     if length(dTSI) == total_num_gen 
       # gradient wrt [pg]
@@ -130,7 +132,7 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   tsilib = ret_tsilib()
   t0 = time()
   dTSI2 = tsilib.eval_tsi_h(Surrogate, PG_full, QG_full, PL, QL, muTSI, st_args)
-  println("Total time elapsed for Hess TSI: $(time() - t0)")
+  # println("Total time elapsed for Hess TSI: $(time() - t0)")
 
   # extract Hessian infomation just for active generators
   hess = zeros(2 * num_active_gen, 2 * num_active_gen)

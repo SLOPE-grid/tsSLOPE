@@ -10,10 +10,13 @@ import time
 def TSI_constraint(Surrogate, Pg, Qg, st_args):
     # print(f"In TSI\n")
     # print(f"Length of pg: {len(Pg)}\n")
+    # print(f"Computing TSI constraint for model type: {Surrogate['model_type']} ...") 
     if Surrogate['model_type'] == "CNF":
         return TSI_constraint_CNF(Surrogate, Pg, Qg, st_args)
     elif Surrogate['model_type'] == "DKL":
         return TSI_constraint_DKL(Surrogate, Pg, Qg, st_args)
+    elif Surrogate['model_type'] == "CNN_UQ":
+        return TSI_constraint_CNN_UQ(Surrogate, Pg, Qg, st_args)
     else:        
         if st_args['reorder_pg']:
             return TSI_constraint_CNN_Reorder_pg(Surrogate, Pg, Qg, st_args)
@@ -58,7 +61,9 @@ def constraint_value(
     F_u0 = model.cdf(y0, x_std).view(())       # scalar
     total_time = time.time() - t0
     # print(f"Total time to calculate model.cdf: {total_time}")
+    alpha = .9 # Remove this later
     c = (1.0 - alpha) - F_u0
+    print(f"F_u0={F_u0}, TSI = (1.0 - {alpha})  - F_u0 = {c}")
     return c
 
 def TSI_constraint_CNF(Surrogate, Pg, Qg, st_args):
@@ -94,34 +99,55 @@ def TSI_constraint_CNF(Surrogate, Pg, Qg, st_args):
 
     return c_val.item()
 
-def TSI_constraint_CNN(Surrogate, Pg, Qg, st_args):
-    model = Surrogate['model']
-    dtype = Surrogate['dtype'] 
-    active_gen_only = Surrogate['active_gen_only']
-    gen_idx = st_args['gen_idx']
-
-    model.eval()
-
-    PL = st_args['PL']
-    QL = st_args['QL']
+def TSI_constraint_CNN(surrogate, Pg, Qg, st_args):
+    model = surrogate["model"]
+    dtype = surrogate.get("dtype", next(model.parameters()).dtype)
+    device = surrogate.get("device", next(model.parameters()).device)
+    active_gen_only = surrogate.get("active_gen_only", True)
+    use_half_columns = surrogate.get("use_half_columns", False)
 
     if active_gen_only:
-        Pg_input = Pg[gen_idx].reshape(1, -1)
-        Qg_input = Qg[gen_idx].reshape(1, -1)
+        gen_idx = st_args["gen_idx"]
+        pg = torch.as_tensor(Pg[gen_idx], dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            print(f"Using full columns for Qg in TSI_constraint_CNN.")
+            qg = torch.as_tensor(Qg[gen_idx], dtype=dtype, device=device).reshape(-1)
     else:
-        Pg_input = Pg.reshape(1, -1)
-        Qg_input = Qg.reshape(1, -1)
+        pg = torch.as_tensor(Pg, dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg, dtype=dtype, device=device).reshape(-1)
 
-    Pl_input = PL.reshape(1, -1)
-    Ql_input = QL.reshape(1, -1)
+    pl = torch.as_tensor(st_args["PL"], dtype=dtype, device=device).reshape(-1)
+    if not use_half_columns:
+        ql = torch.as_tensor(st_args["QL"], dtype=dtype, device=device).reshape(-1)
 
-    X_np = np.hstack([Pg_input, Pl_input, Ql_input])
+    model.eval()
+    with torch.no_grad():
+        if use_half_columns:
+            x_raw = torch.cat([pg, pl], dim=0)
+        else:
+            x_raw = torch.cat([pg, pl, qg, ql], dim=0)
 
-    X = torch.tensor(X_np, dtype=dtype).unsqueeze(0)
+        if surrogate.get("normalize_inputs", False):
+            print("Normalizing inputs for TSI_constraint_CNN.")
+            x_mean = surrogate.get("X_mean")
+            x_std = surrogate.get("X_std")
+            if x_mean is None or x_std is None:
+                raise RuntimeError(
+                    "Surrogate says normalize_inputs=True, but X_mean/X_std are missing."
+                )
+            x_mean = x_mean.to(dtype=dtype, device=device).reshape(-1)
+            x_std = x_std.to(dtype=dtype, device=device).reshape(-1)
+            if x_raw.numel() != x_mean.numel() or x_raw.numel() != x_std.numel():
+                raise ValueError(
+                    f"Input length {x_raw.numel()} does not match normalization stats "
+                    f"({x_mean.numel()} means, {x_std.numel()} stds)."
+                )
+            x_raw = (x_raw - x_mean) / x_std
 
-    pred = model(X).item()
+        probability = model(x_raw.view(1, 1, -1)).sum()
 
-    return pred
+    return probability.item()
 
 def TSI_constraint_CNN_Reorder_pg(Surrogate, Pg, Qg, st_args):
     model = Surrogate['model']
@@ -198,6 +224,72 @@ def TSI_constraint_CNN_Grad_UQ(Surrogate, Pg, Qg, st_args):
 
     pred = y - beta * torch.dot(grad_pg, grad_pg)
     return pred.item()
+
+def TSI_constraint_CNN_UQ(surrogate, Pg, Qg, st_args):
+    model = surrogate["model"]
+    dtype = surrogate.get("dtype", next(model.parameters()).dtype)
+    device = surrogate.get("device", next(model.parameters()).device)
+    active_gen_only = surrogate.get("active_gen_only", True)
+    use_half_columns = surrogate.get("use_half_columns", False)
+    Mul_confi = st_args['Mul_confi']    
+
+    if active_gen_only:
+        gen_idx = st_args["gen_idx"]
+        pg = torch.as_tensor(Pg[gen_idx], dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            # print(f"Using full columns for Qg in TSI_constraint_CNN_UQ.")
+            qg = torch.as_tensor(Qg[gen_idx], dtype=dtype, device=device).reshape(-1)
+    else:
+        pg = torch.as_tensor(Pg, dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg, dtype=dtype, device=device).reshape(-1)
+
+    pl = torch.as_tensor(st_args["PL"], dtype=dtype, device=device).reshape(-1)
+    if not use_half_columns:
+        ql = torch.as_tensor(st_args["QL"], dtype=dtype, device=device).reshape(-1)
+
+    model.eval()
+    with torch.no_grad():
+        if use_half_columns:
+            x_raw = torch.cat([pg, pl], dim=0)
+        else:
+            x_raw = torch.cat([pg, pl, qg, ql], dim=0)
+
+        if surrogate.get("normalize_inputs", False):
+            # print("Normalizing inputs for TSI_constraint_CNN_UQ.")
+            x_mean = surrogate.get("X_mean")
+            x_std = surrogate.get("X_std")
+            if x_mean is None or x_std is None:
+                raise RuntimeError(
+                    "Surrogate says normalize_inputs=True, but X_mean/X_std are missing."
+                )
+            x_mean = x_mean.to(dtype=dtype, device=device).reshape(-1)
+            x_std = x_std.to(dtype=dtype, device=device).reshape(-1)
+            if x_raw.numel() != x_mean.numel() or x_raw.numel() != x_std.numel():
+                raise ValueError(
+                    f"Input length {x_raw.numel()} does not match normalization stats "
+                    f"({x_mean.numel()} means, {x_std.numel()} stds)."
+                )
+            x_raw = (x_raw - x_mean) / x_std
+
+        mean_raw, var_raw = model(x_raw.view(1, 1, -1))
+        mean = mean_raw.sum()
+        std = torch.sqrt(var_raw.sum())
+        if surrogate.get("normalize_targets", False):
+            y_mean = surrogate.get("y_mean")
+            y_std = surrogate.get("y_std")
+            if y_mean is None or y_std is None:
+                raise RuntimeError(
+                    "Surrogate says normalize_targets=True, but y_mean/y_std are missing."
+                )
+            mean = y_mean + y_std * mean
+            std = y_std * std
+        constraint = mean - Mul_confi * std 
+
+    print("Mean: ", mean, "STD: ", std )
+    print("TSI UQ: ", constraint)
+
+    return constraint.item()
 
 def TSI_constraint_GP(GPmodel, Pg, Qg, st_args):
     Mul_confi = st_args['Mul_confi']

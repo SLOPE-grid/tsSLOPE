@@ -102,6 +102,8 @@ def SR1_spar_Sparse(B0, s, y, top_idx):
     N = Y - B0 @ S
     M = D + L + L.T - S.T @ B0 @ S
 
+    # print(f"M: {M}")
+
     # Reduce eigenproblem via thin QR
     Q, R = np.linalg.qr(N, mode='reduced')
 

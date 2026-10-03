@@ -13,8 +13,11 @@ import time
 def d2TSI_dV2dP2(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
     # print("In Hessian")
     # print(Surrogate['model_type'])
+    # print(f"Computing d2TSI_dV2dP2 for model type: {Surrogate['model_type']} ...")
     if Surrogate['model_type'] == "CNF":
         return d2TSI_dV2dP2_CNF(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
+    elif Surrogate['model_type'] == "CNN_UQ":
+        return d2TSI_dV2dP2_CNN_UQ(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
     elif Surrogate['model_type'] == "CNN":
         if st_args['reorder_pg']:
             return d2TSI_dV2dP2_CNN_Reorder_pg(Surrogate, Pg, Qg, Pl, Ql, muTSI, st_args)
@@ -62,6 +65,7 @@ def constraint_value(
     # Map to standardized features for the model
     x_std = x_to_std(x_param, scaler, x_space).view(1, -1)
     y0 = torch.tensor([u0], device=device, dtype=dtype)
+    alpha = .9 # Remove this later
     F_u0 = model.cdf(y0, x_std).view(())       # scalar
     c = (1.0 - alpha) - F_u0
     return c
@@ -113,35 +117,68 @@ def d2TSI_dV2dP2_CNF(CNFmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
 
     return H
 
-def d2TSI_dV2dP2_CNN(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
-    # print("In CNN Hessian")
+from torch.autograd.functional import hessian
 
-    model = CNNmodel["model"]
-    dtype = CNNmodel['dtype'] 
-    active_gen_only = CNNmodel['active_gen_only']
-    gen_idx = st_args['gen_idx']
-
-
-    def model_scalar(pg_vector):
-        pl_t = torch.tensor(Pl, dtype=dtype)
-        ql_t = torch.tensor(Ql, dtype=dtype)
-
-        X = torch.cat([pg_vector.clone(), pl_t, ql_t], dim=0)
-        X = X.unsqueeze(0).unsqueeze(0)
-
-        y = model(X)
-        return y.sum()    # must be scalar
+def d2TSI_dV2dP2_CNN(surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
+    model = surrogate["model"]
+    dtype = surrogate.get("dtype", next(model.parameters()).dtype)
+    device = surrogate.get("device", next(model.parameters()).device)
+    active_gen_only = surrogate.get("active_gen_only", True)
+    use_half_columns = surrogate.get("use_half_columns", False)
 
     if active_gen_only:
-        pg = torch.tensor(Pg[gen_idx], dtype=dtype, requires_grad=True)
+        gen_idx = st_args["gen_idx"]
+        pg = torch.as_tensor(Pg[gen_idx], dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg[gen_idx], dtype=dtype, device=device).reshape(-1)
     else:
-        pg = torch.tensor(Pg, dtype=dtype, requires_grad=True)
+        pg = torch.as_tensor(Pg, dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg, dtype=dtype, device=device).reshape(-1)
 
-    H = hessian(model_scalar, pg)
+    pg = pg.detach().clone()
+    ng = pg.numel()
+    if use_half_columns:
+        hessian_input = pg
+    else:
+        qg = qg.detach().clone()
+        hessian_input = torch.cat([pg, qg], dim=0)
+    pl = torch.as_tensor(Pl, dtype=dtype, device=device).reshape(-1)
+    if not use_half_columns:
+        ql = torch.as_tensor(Ql, dtype=dtype, device=device).reshape(-1)
 
-    H = H.detach().cpu().numpy()
+    def probability_for_hessian(vector):
+        if use_half_columns:
+            x_raw = torch.cat([vector, pl], dim=0)
+        else:
+            pg_vector = vector[:ng]
+            qg_vector = vector[ng:]
+            x_raw = torch.cat([pg_vector, pl, qg_vector, ql], dim=0)
 
-    return H
+        if surrogate.get("normalize_inputs", False):
+            x_mean = surrogate.get("X_mean")
+            x_std = surrogate.get("X_std")
+            if x_mean is None or x_std is None:
+                raise RuntimeError(
+                    "Surrogate says normalize_inputs=True, but X_mean/X_std are missing."
+                )
+            x_mean = x_mean.to(dtype=dtype, device=device).reshape(-1)
+            x_std = x_std.to(dtype=dtype, device=device).reshape(-1)
+            if x_raw.numel() != x_mean.numel() or x_raw.numel() != x_std.numel():
+                raise ValueError(
+                    f"Input length {x_raw.numel()} does not match normalization stats "
+                    f"({x_mean.numel()} means, {x_std.numel()} stds)."
+                )
+            x_raw = (x_raw - x_mean) / x_std
+
+        return model(x_raw.view(1, 1, -1)).sum()
+
+    model.eval()
+    hessian = torch.autograd.functional.hessian(
+        probability_for_hessian, hessian_input, create_graph=False
+    )
+
+    return hessian.detach().cpu().numpy()
 
 def d2TSI_dV2dP2_CNN_Reorder_pg(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     # print("In CNN Hessian")
@@ -223,6 +260,81 @@ def d2TSI_dV2dP2_CNN_Grad_UQ(CNNmodel, Pg, Qg, Pl, Ql, muTSI, st_args):
     H = torch.autograd.functional.hessian(
     lambda p: f_scalar(p, beta=beta),
     pg)
+
+    return H.detach().cpu().numpy()
+
+def d2TSI_dV2dP2_CNN_UQ(surrogate, Pg, Qg, Pl, Ql, muTSI, st_args):
+    
+    model = surrogate["model"]
+    dtype = surrogate.get("dtype", next(model.parameters()).dtype)
+    device = surrogate.get("device", next(model.parameters()).device)
+    active_gen_only = surrogate.get("active_gen_only", True)
+    use_half_columns = surrogate.get("use_half_columns", False)
+    Mul_confi = st_args['Mul_confi']
+
+    if active_gen_only:
+        gen_idx = st_args["gen_idx"]
+        pg = torch.as_tensor(Pg[gen_idx], dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg[gen_idx], dtype=dtype, device=device).reshape(-1)
+    else:
+        pg = torch.as_tensor(Pg, dtype=dtype, device=device).reshape(-1)
+        if not use_half_columns:
+            qg = torch.as_tensor(Qg, dtype=dtype, device=device).reshape(-1)
+
+    pg = pg.detach().clone()
+    ng = pg.numel()
+    if use_half_columns:
+        hessian_input = pg
+    else:
+        qg = qg.detach().clone()
+        hessian_input = torch.cat([pg, qg], dim=0)
+    pl = torch.as_tensor(Pl, dtype=dtype, device=device).reshape(-1)
+    if not use_half_columns:
+        ql = torch.as_tensor(Ql, dtype=dtype, device=device).reshape(-1)
+
+    def constraint_for_hessian(vector):
+        if use_half_columns:
+            x_raw = torch.cat([vector, pl], dim=0)
+        else:
+            pg_vector = vector[:ng]
+            qg_vector = vector[ng:]
+            x_raw = torch.cat([pg_vector, pl, qg_vector, ql], dim=0)
+
+        if surrogate.get("normalize_inputs", False):
+            x_mean = surrogate.get("X_mean")
+            x_std = surrogate.get("X_std")
+            if x_mean is None or x_std is None:
+                raise RuntimeError(
+                    "Surrogate says normalize_inputs=True, but X_mean/X_std are missing."
+                )
+            x_mean = x_mean.to(dtype=dtype, device=device).reshape(-1)
+            x_std = x_std.to(dtype=dtype, device=device).reshape(-1)
+            if x_raw.numel() != x_mean.numel() or x_raw.numel() != x_std.numel():
+                raise ValueError(
+                    f"Input length {x_raw.numel()} does not match normalization stats "
+                    f"({x_mean.numel()} means, {x_std.numel()} stds)."
+                )
+            x_raw = (x_raw - x_mean) / x_std
+
+        mean_raw, var_raw = model(x_raw.view(1, 1, -1))
+        mean = mean_raw.sum()
+        std = torch.sqrt(var_raw.sum())
+        if surrogate.get("normalize_targets", False):
+            y_mean = surrogate.get("y_mean")
+            y_std = surrogate.get("y_std")
+            if y_mean is None or y_std is None:
+                raise RuntimeError(
+                    "Surrogate says normalize_targets=True, but y_mean/y_std are missing."
+                )
+            mean = y_mean + y_std * mean
+            std = y_std * std
+        return mean - Mul_confi * std
+
+    model.eval()
+    H = torch.autograd.functional.hessian(
+        constraint_for_hessian, hessian_input, create_graph=False
+    )
 
     return H.detach().cpu().numpy()
 

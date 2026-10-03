@@ -575,11 +575,34 @@ class CNN1D_Softplus(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
+class UQCNN(nn.Module):
+    def __init__(self):
+        super(UQCNN, self).__init__()
+        self.features = nn.Sequential(
+            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.Softplus(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(16, 32, kernel_size=3, padding=1),
+            nn.Softplus(),
+            nn.AvgPool1d(2),
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.Softplus(),
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+        )
+        self.fc_mean = nn.Linear(64, 1)
+        self.fc_var = nn.Linear(64, 1)
+
+    def forward(self, x):
+        h = self.features(x)
+        mean = self.fc_mean(h)
+        log_var = self.fc_var(h)
+        var = torch.exp(log_var) + 1e-6
+        return mean, var
    
 def load_surrogate(Model_Path, data_record, model_type, active_gen_only = True):
 
-    print(f"model_type: {model_type}, Model_Path: {Model_Path}")
-    
     if model_type == "CNN":
         return load_CNNmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_SiLU":
@@ -594,6 +617,8 @@ def load_surrogate(Model_Path, data_record, model_type, active_gen_only = True):
         return load_CNNmodel_Soft(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNN_Grad_UQ":
         return load_CNNmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
+    elif model_type == "CNN_UQ":
+        return load_CNN_UQ(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "CNF":
         return load_CNFmodel(Model_Path, data_record, model_type, active_gen_only = active_gen_only)
     elif model_type == "DSPP":
@@ -845,35 +870,185 @@ def load_CNNmodel_Tanh(Model_Path, data_record, model_type,
     # return Surrogate, data, TSI
     return Surrogate
 
-def load_CNNmodel_Soft(Model_Path, data_record, model_type,
-    override_dtype: Optional[str] = "float64", active_gen_only = True):
+def load_CNNmodel_Soft(
+    Model_Path,
+    data_record=None,
+    model_type="CNN",
+    override_dtype: Optional[str] = "float64",
+    active_gen_only=True,
+):
     warnings.filterwarnings("ignore")
-    # data = scio.loadmat(data_record)
-    # data = data['Data']
 
     if override_dtype is not None:
         override_dtype = override_dtype.lower()
     dtype = {"float32": torch.float32, "float64": torch.float64}.get(override_dtype)
+    if dtype is None:
+        dtype = torch.float64
 
-    # # Binary target: last column >= 0 → class 1, else 0
-    # TSI = data[:, -1].reshape(-1, 1)
-    # TSI = (TSI >= 0).astype(int)
+    loaded_obj = torch.load(Model_Path, map_location=torch.device("cpu"))
+    is_checkpoint_bundle = isinstance(loaded_obj, dict) and "model_state_dict" in loaded_obj
 
-    # data = data[:, :-1]
+    if is_checkpoint_bundle:
+        checkpoint = loaded_obj
+        state_dict = checkpoint["model_state_dict"]
+    elif isinstance(loaded_obj, dict) and all(
+        torch.is_tensor(value) for value in loaded_obj.values()
+    ):
+        checkpoint = None
+        state_dict = loaded_obj
+    else:
+        raise RuntimeError(
+            "Expected either a model-parameter state_dict or a checkpoint bundle "
+            "containing 'model_state_dict'."
+        )
 
-    model = CNN1D_Softplus().double()
-    
-    state_dict = torch.load(Model_Path, map_location=torch.device('cpu'))
-
+    model = CNN1D_Softplus().to(dtype=dtype)
     model.load_state_dict(state_dict)
 
-    Surrogate = {}
-    Surrogate['model'] = model
-    Surrogate['dtype'] = dtype
-    Surrogate['model_type'] = "CNN"
-    Surrogate['active_gen_only'] = active_gen_only
+    surrogate = {
+        "model": model,
+        "device": torch.device("cpu"),
+        "dtype": dtype,
+        "model_type": "CNN",
+        "active_gen_only": active_gen_only,
+    }
 
-    # return Surrogate, data, TSI
+    if checkpoint is None:
+        return surrogate
+
+    norm_stats = checkpoint.get("norm_stats") or {}
+    has_x_mean = "X_mean" in checkpoint or "X_mean" in norm_stats
+    has_x_std = "X_std" in checkpoint or "X_std" in norm_stats
+    has_y_mean = (
+        "y_mean" in checkpoint
+        or "Y_mean" in checkpoint
+        or "y_mean" in norm_stats
+        or "Y_mean" in norm_stats
+    )
+    has_y_std = (
+        "y_std" in checkpoint
+        or "Y_std" in checkpoint
+        or "y_std" in norm_stats
+        or "Y_std" in norm_stats
+    )
+    normalize_inputs = bool(checkpoint.get("normalize_inputs", has_x_mean and has_x_std))
+    normalize_targets = bool(checkpoint.get("normalize_targets", has_y_mean and has_y_std))
+    feature_info = checkpoint.get("feature_info") or {}
+
+    surrogate["normalize_inputs"] = normalize_inputs
+    surrogate["normalize_targets"] = normalize_targets
+    surrogate["use_half_columns"] = bool(feature_info.get("use_half_columns", False))
+
+    if normalize_inputs:
+        X_mean = checkpoint.get("X_mean", norm_stats.get("X_mean"))
+        X_std = checkpoint.get("X_std", norm_stats.get("X_std"))
+        if X_mean is None or X_std is None:
+            raise RuntimeError(
+                "Checkpoint says normalize_inputs=True, but X_mean/X_std were not found "
+                "in the checkpoint or norm_stats."
+            )
+        surrogate["X_mean"] = torch.as_tensor(X_mean, dtype=dtype).reshape(-1)
+        surrogate["X_std"] = torch.as_tensor(X_std, dtype=dtype).reshape(-1)
+    else:
+        surrogate["X_mean"] = None
+        surrogate["X_std"] = None
+
+    print(surrogate.keys())
+    print(f"Use half columns: {surrogate['use_half_columns']}")
+
+    return surrogate
+
+def load_CNN_UQ(Model_Path, data_record, model_type="CNN_UQ", active_gen_only=True):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if not os.path.exists(Model_Path):
+        raise FileNotFoundError(f"Model_Path does not exist: {Model_Path}")
+
+    loaded_obj = _torch_load(Model_Path, device)
+    is_checkpoint_bundle = isinstance(loaded_obj, dict) and "model_state_dict" in loaded_obj
+
+    if is_checkpoint_bundle:
+        bundle = loaded_obj
+        state_dict = bundle["model_state_dict"]
+    elif isinstance(loaded_obj, dict) and all(
+        torch.is_tensor(value) for value in loaded_obj.values()
+    ):
+        bundle = None
+        state_dict = loaded_obj
+    else:
+        raise RuntimeError(
+            "Expected either a model-parameter state_dict or a checkpoint bundle "
+            "containing 'model_state_dict'."
+        )
+
+    dtype_name = str(bundle.get("dtype", "float64") if bundle else "float64").lower()
+    dtype = torch.float64 if "64" in dtype_name else torch.float32
+
+    model = UQCNN().to(device=device, dtype=dtype)
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    Surrogate = {
+        "model": model,
+        "device": device,
+        "dtype": dtype,
+        "model_type": "CNN_UQ",
+        "active_gen_only": active_gen_only,
+    }
+
+    if bundle is None:
+        return Surrogate
+
+    norm_stats = bundle.get("norm_stats") or {}
+    has_x_mean = "X_mean" in bundle or "X_mean" in norm_stats
+    has_x_std = "X_std" in bundle or "X_std" in norm_stats
+    has_y_mean = (
+        "y_mean" in bundle
+        or "Y_mean" in bundle
+        or "y_mean" in norm_stats
+        or "Y_mean" in norm_stats
+    )
+    has_y_std = (
+        "y_std" in bundle
+        or "Y_std" in bundle
+        or "y_std" in norm_stats
+        or "Y_std" in norm_stats
+    )
+    normalize_inputs = bool(bundle.get("normalize_inputs", has_x_mean and has_x_std))
+    normalize_targets = bool(bundle.get("normalize_targets", has_y_mean and has_y_std))
+    feature_info = bundle.get("feature_info") or {}
+
+    Surrogate["normalize_inputs"] = normalize_inputs
+    Surrogate["normalize_targets"] = normalize_targets
+    Surrogate["use_half_columns"] = bool(
+        bundle.get("use_half_columns", feature_info.get("use_half_columns", False))
+    )
+
+    if normalize_inputs:
+        X_mean = bundle.get("X_mean", norm_stats.get("X_mean"))
+        X_std = bundle.get("X_std", norm_stats.get("X_std"))
+        if X_mean is None or X_std is None:
+            raise RuntimeError(
+                "Checkpoint says normalize_inputs=True, but X_mean/X_std were not found "
+                "in the checkpoint or norm_stats."
+            )
+        Surrogate["X_mean"] = torch.as_tensor(X_mean, dtype=dtype, device=device).reshape(-1)
+        Surrogate["X_std"] = torch.as_tensor(X_std, dtype=dtype, device=device).reshape(-1)
+    else:
+        Surrogate["X_mean"] = None
+        Surrogate["X_std"] = None
+
+    if normalize_targets:
+        y_mean = bundle.get("y_mean", bundle.get("Y_mean", norm_stats.get("y_mean", norm_stats.get("Y_mean"))))
+        y_std = bundle.get("y_std", bundle.get("Y_std", norm_stats.get("y_std", norm_stats.get("Y_std"))))
+        if y_mean is None or y_std is None:
+            raise RuntimeError(
+                "Checkpoint says normalize_targets=True, but y_mean/y_std were not found "
+                "in the checkpoint or norm_stats."
+            )
+        Surrogate["y_mean"] = float(np.asarray(y_mean).reshape(-1)[0])
+        Surrogate["y_std"] = float(np.asarray(y_std).reshape(-1)[0])
+
     return Surrogate
 
 def load_GPmodel(Model_Path, data_record, model_type,  active_gen_only = True):

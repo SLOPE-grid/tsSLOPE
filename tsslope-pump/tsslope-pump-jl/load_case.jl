@@ -10,7 +10,7 @@ function Mul_confi_get(confi_level)
         Mul_confi = 1.0
     elseif confi_level == 2  # 2*std 95.449974%
         Mul_confi = 2.0
-    elseif confi_level == 3  # 2*std 3*std 99.730020%
+    elseif confi_level == 3  # 3*std 99.730020%
         Mul_confi = 3.0
     elseif confi_level == 6  # 60% - 0.8416
         Mul_confi = 0.8416
@@ -57,7 +57,7 @@ function load_case_general(psd::SCACOPFdata, pf_file::String, gen_type::Union{No
     PL = loads[!, :PL] .* 0.01
     QL = -loads[!, :QL] .* 0.01
 
-    confi_level = 2
+    confi_level = 1
   
     Mul_confi = Mul_confi_get(confi_level)
 

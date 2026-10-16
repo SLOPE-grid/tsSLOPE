@@ -110,7 +110,7 @@ def TSI_constraint_CNN(surrogate, Pg, Qg, st_args):
         gen_idx = st_args["gen_idx"]
         pg = torch.as_tensor(Pg[gen_idx], dtype=dtype, device=device).reshape(-1)
         if not use_half_columns:
-            print(f"Using full columns for Qg in TSI_constraint_CNN.")
+            # print(f"Using full columns for Qg in TSI_constraint_CNN.")
             qg = torch.as_tensor(Qg[gen_idx], dtype=dtype, device=device).reshape(-1)
     else:
         pg = torch.as_tensor(Pg, dtype=dtype, device=device).reshape(-1)
@@ -286,8 +286,8 @@ def TSI_constraint_CNN_UQ(surrogate, Pg, Qg, st_args):
             std = y_std * std
         constraint = mean - Mul_confi * std 
 
-    print("Mean: ", mean, "STD: ", std )
-    print("TSI UQ: ", constraint)
+    # print("Mean: ", mean, "STD: ", std )
+    # print("TSI UQ: ", constraint)
 
     return constraint.item()
 

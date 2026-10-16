@@ -124,11 +124,21 @@ CNN_Soft_7k_model_path =  "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/CNN
 CNN_Soft_7k_1_model_path =  "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/CNN1D_Softplus_seed_9000_bs_32_epochs_500_lr_1e-03_acc_0.84250_auc_0.91526.pth"
 CNN_Soft_7k_2_model_path =  "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/CNN1D_Softplus_seed_9001_bs_32_epochs_500_lr_1e-03_acc_0.83590_auc_0.90552.pth"
 
+CNN_4k_1_model_path =  "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/Models_parameters_4k/CNN1D_Softplus_seed_9000_set_AC_normalized_acc_0.85464_auc_0.89007.pt"
+
+CNN_Norm_Full_4k_1_model_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/Models_parameters_4k/CNN1D_Softplus_seed_9000_normalized_full_feature_acc_0.87719_auc_0.93954.pt"
+CNN_Norm_Half_4k_1_model_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/Models_parameters_4k/CNN1D_Softplus_seed_9000_normalized_half_feature_acc_0.85464_auc_0.89007.pt"
+CNN_UnNorm_Full_4k_1_model_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/Models_parameters_4k/CNN1D_Softplus_seed_9000_unnormalized_full_feature_acc_0.84712_auc_0.88640.pt"
+CNN_UnNorm_Half_4k_1_model_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/Models_parameters_4k/CNN1D_Softplus_seed_9000_unnormalized_half_feature_acc_0.84962_auc_0.90067.pt"
+
+CNN_UQ_Full_4k_1_model_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/Models_parameters_4k/UQ_CNN1D_exp_seed_9000_normalized_full_feature_rmse_33.83751_r2_0.74378.pt"
+CNN_UQ_Half_4k_1_model_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-ml/Models_parameters_4k/UQ_CNN1D_exp_seed_9000_normalized_half_feature_rmse_36.04559_r2_0.70925.pt"
 
 ACTIVSg500_case_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/example/ACTIVSg500"
 Texas_case_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/example/Texas7k"
 Texas_old_case_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/example/Texas7k_old"
+Texas_mod_bounds_case_path = "/p/lustre1/hiop/project/scidac/tsSLOPE/example/Texas7k_mod_Bounds"
 
-case_sol_path = "./output"
+case_sol_path = "./output/tong_7k"
 
 ENV["PYTHON"] = "/p/lustre1/hiop/project/scidac/tsSLOPE/tsslope-pump/pyenv/bin/python3"

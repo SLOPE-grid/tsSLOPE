@@ -52,6 +52,8 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
   tsilib = ret_tsilib()
   # t0 = time()
   dTSI = tsilib.eval_tsi_g(Surrogate, PG_full, QG_full, PL, QL, st_args)
+  cnf_idx = vcat(1:num_active_gen, (1:num_active_gen) .+ (num_active_gen + nl))
+  Surrogate["model_type"] == "CNF" && return Float64.(dTSI[cnf_idx])
   # println("Total time elapsed for Grad TSI: $(time() - t0)")
 
   # extract gradient infomation just for active generators
@@ -79,27 +81,34 @@ function TSIConstraintPrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dict, pg
     # println("Extracting gradient for active generators ...")
     # check if the gradient is with respect to just pg or both pg qg
     if length(dTSI) == total_num_gen 
+      println("Gradient wrt [pg]")
       # gradient wrt [pg]
       grad[1:num_active_gen] = dTSI[gen_idx]
     elseif length(dTSI) == num_active_gen 
+      println("Gradient wrt [pg_active]")
       # gradient wrt [pg_active]
       grad[1:num_active_gen] = dTSI
     elseif length(dTSI) == 2*total_num_gen
+      println("Gradient wrt [pg qg]")
       # gradient wrt [pg qg]
       grad[1:num_active_gen] = dTSI[gen_idx]
       grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+num_active_gen]
     elseif length(dTSI) == 2*num_active_gen
+      println("Gradient wrt [pg_active qg_active]")
       # gradient wrt [pg_active qg_active]
       grad[1:num_active_gen] = dTSI[1:num_active_gen]
       grad[1+num_active_gen:2*num_active_gen] = dTSI[(1:num_active_gen).+num_active_gen]
     elseif length(dTSI) == 2 * total_num_gen + 2 * nl 
+      println("Gradient wrt [pg pl qg ql]")
       # gradient wrt [pg pl qg ql]
       numb_gen_loads = total_num_gen + nl 
       grad[1:num_active_gen] = dTSI[gen_idx]
       grad[1+num_active_gen:2*num_active_gen] = dTSI[gen_idx.+ numb_gen_loads]
     else
+      println("Gradient wrt [pg_active pl qg_active ql]")
       # gradient wrt [pg_active pl qg_active ql]
       numb_gen_loads = num_active_gen + nl 
+      println("length(pg_active) = $(num_active_gen), length(pl) = $nl, length(pg_active) + length(pl) = $numb_gen_loads")
       grad[1:num_active_gen] = dTSI[1:num_active_gen]
       grad[1+num_active_gen:2*num_active_gen] = dTSI[(1:num_active_gen).+ numb_gen_loads]
     end
@@ -132,6 +141,8 @@ function TSIConstraintPrimePrime(psd::SCACOPFdata, Surrogate::Dict, st_args::Dic
   tsilib = ret_tsilib()
   t0 = time()
   dTSI2 = tsilib.eval_tsi_h(Surrogate, PG_full, QG_full, PL, QL, muTSI, st_args)
+  cnf_idx = vcat(1:num_active_gen, (1:num_active_gen) .+ (num_active_gen + nl))
+  Surrogate["model_type"] == "CNF" && return Float64.(dTSI2[cnf_idx, cnf_idx])
   # println("Total time elapsed for Hess TSI: $(time() - t0)")
 
   # extract Hessian infomation just for active generators

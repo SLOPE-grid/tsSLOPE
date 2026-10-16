@@ -17,6 +17,7 @@ include(string(jl_lib,"/tsi_constraints.jl"))
 test_problem = ACTIVSg500_case_path
 test_problem = Texas_case_path
 test_problem = Texas_old_case_path
+test_problem = Texas_mod_bounds_case_path
 
 if test_problem == ACTIVSg500_case_path
     gen_type = nothing
@@ -33,8 +34,8 @@ active_gen_only = true
 
 # model_type = "CNF"
 # model_type = "DKL_ReLU"
-# model_type = "DKL_Soft"
-model_type = "CNN_Soft"
+model_type = "DKL_Soft"
+# model_type = "CNN_Soft"
 # model_type = "None"
 
 
@@ -53,6 +54,8 @@ Hess_approx = true
 gamma = 0.
 r = 6
 
+display_Sur_Eval_stats = true
+
 gamma_update = false
 
 approx_type = "Sparse"
@@ -60,13 +63,15 @@ approx_type = "Sparse"
 # approx_type = "Full"
 
 
-if test_problem == Texas_case_path || test_problem == Texas_old_case_path
+if test_problem == Texas_case_path || test_problem == Texas_old_case_path  || test_problem == Texas_mod_bounds_case_path
     if model_type == "DKL_ReLU"
         surrogate_path = DKL_ReLU_model_path
     elseif model_type == "DKL_Soft"
         surrogate_path = DKL_Soft_model_path
     elseif model_type == "CNN_Soft"
-        surrogate_path = CNN_Soft_7k_model_path
+        # surrogate_path = CNN_Soft_7k_model_path
+        surrogate_path = CNN_Soft_7k_1_model_path
+        # surrogate_path = CNN_Soft_7k_2_model_path
     else
         surrogate_path = nothing
         model_type = "None"
@@ -88,6 +93,7 @@ else
     surrogate_path = nothing
     model_type = "None"
     approx_type = nothing
+    data_path = DKL_train_xy_path
 end  
 if Hess_approx == false
     approx_type = nothing
@@ -95,7 +101,7 @@ end
 
 surrogate = tsslope_lib.load_model(surrogate_path, data_path, model_type, active_gen_only = active_gen_only)
 
-if apply_warm_start
+if apply_warm_start && approx_type == "Sparse"
     _, _, _, _, _, _, _, warm_start =
         TSACOPF(
             test_problem,
@@ -109,7 +115,7 @@ if apply_warm_start
             save_warm_start = true
         )
 
-    num_iter, total_time, _, _, _, _, _ =
+    num_iter, total_time, _, _, _, _, pg =
         TSACOPF(
             test_problem,
             case_sol_path,
@@ -126,11 +132,12 @@ if apply_warm_start
             gen_type = gen_type, 
             diag_pattern = false,
             warm_start = warm_start,
+            display_Sur_Eval_stats = display_Sur_Eval_stats
         )
 
 
 else
-    num_iter, total_time, _, _, _, _, _ =
+    num_iter, total_time, _, _, _, _, pg =
         TSACOPF(
             test_problem,
             case_sol_path,
@@ -145,7 +152,9 @@ else
             r = r,
             gamma_update = gamma_update,
             gen_type = gen_type, 
+            display_Sur_Eval_stats = display_Sur_Eval_stats
         )
+    println("Total pg: $(sum(pg))")
 end
 
 println("Total time elapsed $(time() - t0)")

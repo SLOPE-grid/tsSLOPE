@@ -16,7 +16,7 @@ include(string(jl_lib,"/tsi_constraints.jl"))
 
 test_problem = ACTIVSg500_case_path
 #test_problem = Texas_case_path
-#test_problem = Texas_old_case_path
+# test_problem = Texas_old_case_path
 
 if test_problem == ACTIVSg500_case_path
     gen_type = nothing
@@ -31,13 +31,15 @@ active_gen_only = true
 
 # model_type = "CNF"
 # model_type = "DKL_ReLU"
-#model_type = "DKL_Soft"
-# model_type = "CNN_Soft"
-model_type = "None"
+# model_type = "DKL_Soft"
+model_type = "CNN_Soft"
+model_type = "CNN_UQ"
+# model_type = "None"
 
-max_iter = 300
+max_iter = 100
 
-if model_type == "CNF"
+if model_type == "CNF" || model_type == "CNN_UQ" 
+# if model_type == "CNF" 
     tau = 0.0
 else
     tau = 0.5
@@ -45,23 +47,23 @@ end
 
 t0 = time()
 
-Hess_approx = true
+Hess_approx = false
 
 # if Hess_approx is false the following parameters are not used
 gamma = 0.
 r = 6
 
-diag_pattern = true
+display_Sur_Eval_stats = false
+
+diag_pattern = false
 
 gamma_update = false
 
 # approx_type = "Sparse"
-approx_type = "Limited"
-# approx_type = "Full"
+# approx_type = "Limited"
+approx_type = "Full"
 
 surrogate_path = nothing
-model_type = "None"
-approx_type = nothing
 if test_problem == Texas_case_path || test_problem == Texas_old_case_path
     if model_type == "DKL_ReLU"
         surrogate_path = DKL_ReLU_model_path
@@ -75,7 +77,14 @@ elseif test_problem == ACTIVSg500_case_path
     if model_type == "CNF"
         surrogate_path = CNF_model_final_path
     elseif model_type == "CNN_Soft"
-        surrogate_path = CNN_Soft_UQ_1_model_path
+        # surrogate_path = CNN_Soft_UQ_1_model_path
+        surrogate_path = CNN_Norm_Full_4k_1_model_path
+        # surrogate_path = CNN_Norm_Half_4k_1_model_path
+        surrogate_path = CNN_UnNorm_Full_4k_1_model_path
+        surrogate_path = CNN_UnNorm_Half_4k_1_model_path
+    elseif model_type == "CNN_UQ"
+        surrogate_path = CNN_UQ_Full_4k_1_model_path
+        surrogate_path = CNN_UQ_Half_4k_1_model_path
     end
     data_path = LLNL_data_record
 end   
@@ -105,5 +114,6 @@ num_iter, total_time, base_cost, Surr_Feasibility_margin, ter_status, norm_grad,
             r = r,
             gamma_update = gamma_update,
             gen_type = gen_type, 
-            diag_pattern = diag_pattern
+            diag_pattern = diag_pattern,
+            display_Sur_Eval_stats = display_Sur_Eval_stats
         )

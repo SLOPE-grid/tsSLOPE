@@ -1000,8 +1000,13 @@ function MOI.eval_hessian_lagrangian(d::MixedTSIEvaluator, Hval, x, σ, μ)
     end
 
     # SR1 update logic
-    grad = d.g_hist_temp[end]
-    popfirst!(d.g_hist_temp)
+    if d.Surrogate["model_type"] == "CNF"
+       grad = TSI_g_bb_grad(x, d.p_idx, d.q_idx, d.psd, d.Surrogate, d.st_args)
+       empty!(d.g_hist_temp)
+    else   
+       grad = d.g_hist_temp[end]
+       popfirst!(d.g_hist_temp)
+    end   
 
     push!(d.x_hist, copy(x_local))
     push!(d.g_hist, grad)

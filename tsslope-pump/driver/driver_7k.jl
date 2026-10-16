@@ -32,6 +32,7 @@ folder_st = parse(Int, get(ENV, "folder_start", "0"))
 
 # test_problem = Texas_case_path
 test_problem = Texas_old_case_path
+# test_problem = Texas_mod_bounds_case_path
 
 gen_type = gen_type_7k_file
 
@@ -44,14 +45,14 @@ active_gen_only = true
 
 Hess_approx = true
 
-max_iter = 500
-numb_runs = 2           # the number of simulations to be performed
+max_iter = 300
+numb_runs = 50         # the number of simulations to be performed
 tau = 0.5
 println("tau: $tau")
 
 # The perterbation of the pl, and ql
-perturb_mode = "normal"    # uniform or normal
-perc = 0.15 # percentage in uniform random sample, or varience in normal random sample
+perturb_mode = "uniform"    # uniform or normal
+perc = 0.50 # percentage in uniform random sample, or varience in normal random sample
 keep_power_factor = true
 
 if perturb_mode == "normal"
@@ -63,6 +64,8 @@ end
 gamma = 0.
 r = 6
 
+display_Sur_Eval_stats = true 
+
 gamma_update = false
 
 approx_type = "Sparse"
@@ -73,9 +76,12 @@ data_path = DKL_train_xy_path
 
 D = Dict{String, Vector{String}}()
 D["None"] = [""]
-D["CNN_Soft"] = [
-                CNN_Soft_7k_1_model_path, CNN_Soft_7k_2_model_path
-                ] 
+# D["CNN_Soft"] = [
+#                 CNN_Soft_7k_1_model_path, CNN_Soft_7k_2_model_path
+#                 ] 
+# D["CNN_Soft"] = [
+#                 CNN_Soft_7k_1_model_path
+#                 ] 
 
 warm_start = Dict{String, Any}(
     "warm_start" => Dict{String, Any}(
@@ -90,155 +96,238 @@ t0 = time()
 seed = jobid * 1000 + folder_st
 println("Random seed = $seed (jobid=$jobid, folder_start=$folder_st)")
 rng = MersenneTwister(seed)
+
+# Maximum number of resampling attempts per run
+max_resample_attempts = 5
+
+# Track failures for summary
+failure_log = []
+
 for j = 1:numb_runs
-    psd_temp = deepcopy(psd)
+    run_success = false
+    attempt = 0
 
-    if j == 1
-        perb = false
-    else
-        perb = true
-        base_p = psd.loads[!, :PL]
-        base_q = psd.loads[!, :QL]
+    # Initialize variables outside try block so they're accessible in catch
+    psd_temp = nothing
+    base_p = nothing
+    base_q = nothing
 
-        # Perturb active power demand (PL)
-        psd_temp.loads[!, :PL] = perturb_percent(base_p; eps=perc, rng=rng)
-
-        # Perturb reactive power demand (QL)
-        if keep_power_factor
-            p_scaled = psd_temp.loads[!, :PL]
-            q_scaled = copy(Float64.(base_q))
-
-            # Buses with nonzero active power: preserve Q/P ratio
-            mask_p_nonzero = abs.(base_p) .> 1e-8
-            if any(mask_p_nonzero)
-                ratio = zeros(Float64, length(base_p))
-                ratio[mask_p_nonzero] .= base_q[mask_p_nonzero] ./ base_p[mask_p_nonzero]
-                q_scaled[mask_p_nonzero] .= ratio[mask_p_nonzero] .* p_scaled[mask_p_nonzero]
-            end
-
-            # Effective PL perturbation for logging / reuse
-            p_noise = zeros(Float64, length(base_p))
-            p_noise[mask_p_nonzero] .= p_scaled[mask_p_nonzero] ./ base_p[mask_p_nonzero] .- 1.0
-
-            # Purely reactive buses: apply the same relative perturbation to Q
-            mask_p_zero_q_nonzero = .!mask_p_nonzero .& (abs.(base_q) .> 1e-8)
-            if any(mask_p_zero_q_nonzero)
-                q_scaled[mask_p_zero_q_nonzero] .=
-                    base_q[mask_p_zero_q_nonzero] .* (1.0 .+ p_noise[mask_p_zero_q_nonzero])
-            end
-
-            psd_temp.loads[!, :QL] = q_scaled
-        else
-            # Independently perturb reactive power demand
-            psd_temp.loads[!, :QL] = perturb_percent(base_q; eps=perc, rng=rng)
+    while !run_success && attempt < max_resample_attempts
+        attempt += 1
+        if attempt > 1
+            println("Resampling run $j, attempt $attempt/$max_resample_attempts")
         end
 
-        if size(psd_temp.loads, 1) > 0
-            BusLoad = indexin(psd_temp.loads[!,:I], psd_temp.N[!,:Bus])
-            for l = 1:size(psd_temp.loads, 1)
-                if psd_temp.loads[l,:STATUS] == 1
-                    psd_temp.N[BusLoad[l],:Pd] = 0.0
-                    psd_temp.N[BusLoad[l],:Qd] = 0.0
+        try
+            psd_temp = deepcopy(psd)
+
+            perb = true
+            base_p = psd.loads[!, :PL]
+            base_q = psd.loads[!, :QL]
+
+            # Perturb active power demand (PL)
+            psd_temp.loads[!, :PL] = perturb_percent(base_p; eps=perc, rng=rng)
+
+            # Perturb reactive power demand (QL)
+            if keep_power_factor
+                p_scaled = psd_temp.loads[!, :PL]
+                q_scaled = copy(Float64.(base_q))
+
+                # Buses with nonzero active power: preserve Q/P ratio
+                mask_p_nonzero = abs.(base_p) .> 1e-8
+                if any(mask_p_nonzero)
+                    ratio = zeros(Float64, length(base_p))
+                    ratio[mask_p_nonzero] .= base_q[mask_p_nonzero] ./ base_p[mask_p_nonzero]
+                    q_scaled[mask_p_nonzero] .= ratio[mask_p_nonzero] .* p_scaled[mask_p_nonzero]
                 end
-            end
-            for l = 1:size(psd_temp.loads, 1)
-                if BusLoad[l] == nothing
-                    error("bus ", psd_temp.loads[l,:I], " of load ", l, " not found.")
+
+                # Effective PL perturbation for logging / reuse
+                p_noise = zeros(Float64, length(base_p))
+                p_noise[mask_p_nonzero] .= p_scaled[mask_p_nonzero] ./ base_p[mask_p_nonzero] .- 1.0
+
+                # Purely reactive buses: apply the same relative perturbation to Q
+                mask_p_zero_q_nonzero = .!mask_p_nonzero .& (abs.(base_q) .> 1e-8)
+                if any(mask_p_zero_q_nonzero)
+                    q_scaled[mask_p_zero_q_nonzero] .=
+                        base_q[mask_p_zero_q_nonzero] .* (1.0 .+ p_noise[mask_p_zero_q_nonzero])
                 end
-                if psd_temp.loads[l,:STATUS] == 1
-                    psd_temp.N[BusLoad[l],:Pd] += psd_temp.loads[l,:PL]/psd_temp.MVAbase
-                    psd_temp.N[BusLoad[l],:Qd] += psd_temp.loads[l,:QL]/psd_temp.MVAbase
-                end
-            end
-        end
-    end
 
-    results = Dict{String, Dict{Int, NamedTuple}}()
-
-    for (model_type, model_paths) in D
-        println("Model: $model_type, Perturbation $j")
-        tmp = Dict{Int, NamedTuple}()
-
-        for (i, path) in enumerate(model_paths)
-            println("Model: $model_type, Perturbation $j, Run $i")
-
-            solution_dir = joinpath(case_sol_path, "$(model_type)", "folder_$(j+folder_st)")
-            if !ispath(solution_dir)
-                mkpath(solution_dir)
-            end
-
-            if model_type == "None"
-                surrogate = Dict("model_type" => nothing)
-
-                num_iter, total_time, base_cost,
-                Surr_Feasibility_margin, ter_status, norm_grad, _, warm_start_temp =
-                    TSACOPF(
-                        test_problem,
-                        solution_dir,
-                        pf_limit_file,
-                        nothing,
-                        psd_temp,
-                        tau;
-                        max_iter = 300,
-                        gen_type = gen_type,
-                        save_warm_start = true,
-                    )
-
-                warm_start["warm_start"] = warm_start_temp
-
+                psd_temp.loads[!, :QL] = q_scaled
             else
-                surrogate = tsslope_lib.load_model(
-                    path,
-                    data_path,
-                    model_type;
-                    active_gen_only = active_gen_only,
-                )
-
-                num_iter, total_time, base_cost,
-                Surr_Feasibility_margin, ter_status, norm_grad, _ =
-                    TSACOPF(
-                        test_problem,
-                        solution_dir,
-                        pf_limit_file,
-                        surrogate,
-                        psd_temp,
-                        tau;
-                        max_iter = max_iter,
-                        Hess_approx = Hess_approx,
-                        gamma = gamma,
-                        approx_type = approx_type,
-                        r = r,
-                        gamma_update = gamma_update,
-                        gen_type = gen_type,
-                        diag_pattern = false,
-                        warm_start = warm_start["warm_start"],
-                    )
+                # Independently perturb reactive power demand
+                psd_temp.loads[!, :QL] = perturb_percent(base_q; eps=perc, rng=rng)
             end
 
-            println(
-                "num_iter: $num_iter,\n",
-                "total_time: $total_time,\n",
-                "base_cost: $base_cost,\n",
-                "termination_status: $ter_status,\n",
-                "Surr_Feasibility_margin: $Surr_Feasibility_margin",
-            )
+            if size(psd_temp.loads, 1) > 0
+                BusLoad = indexin(psd_temp.loads[!,:I], psd_temp.N[!,:Bus])
+                for l = 1:size(psd_temp.loads, 1)
+                    if psd_temp.loads[l,:STATUS] == 1
+                        psd_temp.N[BusLoad[l],:Pd] = 0.0
+                        psd_temp.N[BusLoad[l],:Qd] = 0.0
+                    end
+                end
+                for l = 1:size(psd_temp.loads, 1)
+                    if BusLoad[l] == nothing
+                        error("bus ", psd_temp.loads[l,:I], " of load ", l, " not found.")
+                    end
+                    if psd_temp.loads[l,:STATUS] == 1
+                        psd_temp.N[BusLoad[l],:Pd] += psd_temp.loads[l,:PL]/psd_temp.MVAbase
+                        psd_temp.N[BusLoad[l],:Qd] += psd_temp.loads[l,:QL]/psd_temp.MVAbase
+                    end
+                end
+            end
 
-            tmp[i] = (
-                num_iter = num_iter,
-                total_time = total_time,
-                base_cost = base_cost,
-                Surr_Feasibility_margin = Surr_Feasibility_margin,
-                norm_grad = norm_grad,
-                termination_status = ter_status,
-                perb = perb,
-                model_path = path,
-            )
+            results = Dict{String, Dict{Int, NamedTuple}}()
+
+            for (model_type, model_paths) in D
+                println("Model: $model_type, Perturbation $j")
+                tmp = Dict{Int, NamedTuple}()
+
+                for (i, path) in enumerate(model_paths)
+                    println("Model: $model_type, Perturbation $j, Run $i")
+
+                    solution_dir = joinpath(case_sol_path, "$(model_type)_$(i)", "folder_$(j+folder_st)")
+                    if !ispath(solution_dir)
+                        mkpath(solution_dir)
+                    end
+
+                    if model_type == "None"
+                        surrogate = Dict("model_type" => nothing)
+
+                        num_iter, total_time, base_cost,
+                        Surr_Feasibility_margin, ter_status, norm_grad, _, warm_start_temp =
+                            TSACOPF(
+                                test_problem,
+                                solution_dir,
+                                pf_limit_file,
+                                nothing,
+                                psd_temp,
+                                tau;
+                                max_iter = 300,
+                                gen_type = gen_type,
+                                save_warm_start = true,
+                            )
+
+                        warm_start["warm_start"] = warm_start_temp
+
+                    else
+                        surrogate = tsslope_lib.load_model(
+                            path,
+                            data_path,
+                            model_type;
+                            active_gen_only = active_gen_only,
+                        )
+
+                        num_iter, total_time, base_cost,
+                        Surr_Feasibility_margin, ter_status, norm_grad, _ =
+                            TSACOPF(
+                                test_problem,
+                                solution_dir,
+                                pf_limit_file,
+                                surrogate,
+                                psd_temp,
+                                tau;
+                                max_iter = max_iter,
+                                Hess_approx = Hess_approx,
+                                gamma = gamma,
+                                approx_type = approx_type,
+                                r = r,
+                                gamma_update = gamma_update,
+                                gen_type = gen_type,
+                                diag_pattern = false,
+                                warm_start = warm_start["warm_start"],,
+                                display_Sur_Eval_stats = display_Sur_Eval_stats
+                            )
+                    end
+
+                    println(
+                        "num_iter: $num_iter,\n",
+                        "total_time: $total_time,\n",
+                        "base_cost: $base_cost,\n",
+                        "termination_status: $ter_status,\n",
+                        "Surr_Feasibility_margin: $Surr_Feasibility_margin",
+                    )
+
+                    tmp[i] = (
+                        num_iter = num_iter,
+                        total_time = total_time,
+                        base_cost = base_cost,
+                        Surr_Feasibility_margin = Surr_Feasibility_margin,
+                        norm_grad = norm_grad,
+                        termination_status = ter_status,
+                        perb = perb,
+                        model_path = path,
+                    )
+                end
+
+                results[model_type] = tmp
+            end
+
+            results_perb[j] = results
+            run_success = true  # If we reach here, the run succeeded
+
+        catch e
+            error_msg = sprint(showerror, e, catch_backtrace())
+            println("ERROR in run $j, attempt $attempt: ", e)
+
+            # Save perturbed loads for debugging
+            failure_dir = "./test_7k_results/failed_perturbations"
+            if !ispath(failure_dir)
+                mkpath(failure_dir)
+            end
+
+            failure_file = joinpath(failure_dir, "failed_run_$(j+folder_st)_attempt_$(attempt).csv")
+
+            # Only save if we have valid data
+            if !isnothing(psd_temp) && !isnothing(base_p) && !isnothing(base_q)
+                try
+                    # Save the perturbed PL and QL that caused the failure
+                    df_failed = DataFrame(
+                        bus_id = psd_temp.loads[!, :I],
+                        PL_perturbed = psd_temp.loads[!, :PL],
+                        QL_perturbed = psd_temp.loads[!, :QL],
+                        PL_base = base_p,
+                        QL_base = base_q,
+                        PL_ratio = psd_temp.loads[!, :PL] ./ base_p,
+                        QL_ratio = psd_temp.loads[!, :QL] ./ base_q,
+                    )
+                    CSV.write(failure_file, df_failed)
+                    println("Saved failed perturbation to: $failure_file")
+
+                    # Log this failure
+                    push!(failure_log, (
+                        run_number = j + folder_st,
+                        attempt = attempt,
+                        error_type = string(typeof(e)),
+                        error_msg = first(split(error_msg, '\n'), 1)[1],  # First line of error
+                        file_saved = failure_file,
+                        timestamp = time() - t0,
+                    ))
+                catch save_error
+                    println("Warning: Could not save failed perturbation: $save_error")
+                end
+            else
+                println("Skipping perturbation save (error occurred before data was generated)")
+                # Still log the failure without file
+                push!(failure_log, (
+                    run_number = j + folder_st,
+                    attempt = attempt,
+                    error_type = string(typeof(e)),
+                    error_msg = first(split(error_msg, '\n'), 1)[1],
+                    file_saved = "not_saved",
+                    timestamp = time() - t0,
+                ))
+            end
+
+            if attempt >= max_resample_attempts
+                println("Failed after $max_resample_attempts attempts. Skipping run $j.")
+                # Record failed run
+                results_perb[j] = Dict{String, Dict{Int, NamedTuple}}()
+            else
+                println("Retrying with new random sample...")
+            end
         end
-
-        results[model_type] = tmp
     end
-
-    results_perb[j] = results
 end
 
 
@@ -274,3 +363,19 @@ end
 
 df = DataFrame(rows)
 CSV.write(results_dir * "/" * cvs_filename, df)
+
+# Save failure summary if there were any failures
+if length(failure_log) > 0
+    println("\n========================================")
+    println("FAILURE SUMMARY: $(length(failure_log)) failures occurred")
+    println("========================================")
+    df_failures = DataFrame(failure_log)
+    failure_summary_file = results_dir * "/failure_summary_folder_$(folder_st).csv"
+    CSV.write(failure_summary_file, df_failures)
+    println("Failure summary saved to: $failure_summary_file")
+    println("Individual perturbation files saved in: ./test_7k_results/failed_perturbations/")
+else
+    println("\n========================================")
+    println("All runs completed successfully with no failures!")
+    println("========================================")
+end
